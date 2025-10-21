@@ -93,16 +93,18 @@ class Camera(tk.Frame):
             
         # Lấy FPS từ video để tính delay chính xác
         fps = self.vid.get(cv2.CAP_PROP_FPS)
-        self.delay = int(900 / fps)  # Mặc định 30fps nếu không đọc được
+        self.delay = int(800 / fps)
         
         self.is_playing = True
         self.update_frame()
+    
     
     def stop_video(self):
         """Dừng phát video"""
         self.is_playing = False
         if self.vid and self.vid.isOpened():
             self.vid.release()
+
         
     def update_frame(self):
         """Cập nhật khung hình video và gửi dữ liệu đến Kafka"""
@@ -117,9 +119,24 @@ class Camera(tk.Frame):
                 # Điều chỉnh kích thước để vừa với canvas
                 canvas_width = self.canvas.winfo_width()
                 canvas_height = self.canvas.winfo_height()
-                if canvas_width > 1 and canvas_height > 1:  # Đảm bảo canvas đã được render
-                    img = img.resize((canvas_width, canvas_height), PIL.Image.Resampling.LANCZOS)
                 
+                if canvas_width > 1 and canvas_height > 1:  # Đảm bảo canvas đã được render
+                    # Tính toán tỷ lệ để giữ nguyên aspect ratio
+                    img_width, img_height = img.size
+                    ratio = min(canvas_width/img_width, canvas_height/img_height)
+                    new_width = int(img_width * ratio)
+                    new_height = int(img_height * ratio)
+                    img = img.resize((new_width, new_height), PIL.Image.Resampling.LANCZOS)
+                    
+                    # Tạo ảnh mới với kích thước canvas và nền đen
+                    background = PIL.Image.new('RGB', (canvas_width, canvas_height), (0, 0, 0))
+                    # Tính toán vị trí để đặt ảnh đã resize ở giữa
+                    x_offset = (canvas_width - new_width) // 2
+                    y_offset = (canvas_height - new_height) // 2
+                    # Ghép ảnh đã resize lên nền đen
+                    background.paste(img, (x_offset, y_offset))
+                    img = background
+                    
                 # Hiển thị lên canvas
                 self.photo = PIL.ImageTk.PhotoImage(image=img)
                 self.canvas.create_image(0, 0, image=self.photo, anchor=tk.NW)
