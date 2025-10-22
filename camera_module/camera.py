@@ -7,6 +7,7 @@ import time
 from kafka import KafkaProducer
 import json
 import os
+import base64
 
 class Camera(tk.Frame):
     def __init__(self, master=None, camera_id=0, **kwargs):
@@ -163,11 +164,11 @@ class Camera(tk.Frame):
             self.kafka_producer = KafkaProducer(
                 bootstrap_servers=['localhost:9092'],
                 value_serializer=lambda v: json.dumps(v).encode('utf-8'),
-                # Các cấu hình khác nếu cần
             )
         except Exception as e:
             print(f"Không thể kết nối Kafka: {e}")
             messagebox.showwarning("Cảnh báo", "Không thể kết nối đến Kafka broker")
+    
     
     def send_to_kafka(self, frame):
         """Gửi dữ liệu khung hình đến Kafka"""
@@ -175,17 +176,18 @@ class Camera(tk.Frame):
             return
             
         try:
-            # Trích xuất metadata hoặc thực hiện phân tích khung hình ở đây
-            # Ví dụ: tính toán số lượng xe, người, etc.
             
+            # Mã hóa base64 cho frame
+            _, buffer = cv2.imencode('.jpg', frame)
+            base64_image = base64.b64encode(buffer).decode('utf-8')
+
             # Gửi metadata đến Kafka
             message = {
                 "camera_id": self.camera_id,
                 "timestamp": time.time(),
-                "filename": os.path.basename(self.video_source),
+                "base64_image": base64_image,
                 "frame_height": frame.shape[0],
-                "frame_width": frame.shape[1],
-                # Thêm các phân tích khác ở đây
+                "frame_width": frame.shape[1]
             }
             
             self.kafka_producer.send(self.kafka_topic, message)

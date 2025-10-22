@@ -124,7 +124,7 @@ class VideoPanel(tk.Frame):
 
 class VehicleLog(tk.Frame):
     def __init__(self, master, **kwargs):
-        super().__init__(master, bg="#1f1f1f", width=320, **kwargs)
+        super().__init__(master, bg="#1f1f1f", width=420, **kwargs)
         self.grid_propagate(False)
         self.rowconfigure(1, weight=1)
 
@@ -142,6 +142,7 @@ class VehicleLog(tk.Frame):
             show="headings",
             height=20
         )
+
         self.tree.heading("camera", text="Camera")
         self.tree.heading("class", text="Class")
         self.tree.heading("id", text="Track ID")
@@ -153,6 +154,7 @@ class VehicleLog(tk.Frame):
         self.tree.grid(row=1, column=0, padx=16, pady=(0, 16), sticky="nsew")
 
         style = ttk.Style(self)
+        style.theme_use('clam')
         style.configure("Treeview", background="#2c2c2c", foreground="#ffffff", fieldbackground="#2c2c2c")
         style.configure("Treeview.Heading", background="#3a3a3a", foreground="#ffffff")
         style.map("Treeview", background=[("selected", "#3f51b5")])
@@ -177,9 +179,10 @@ class VehicleLog(tk.Frame):
 class MonitorApp(tk.Tk):
     def __init__(self, brokers=None, topic="vehicle_tracking_data"):
         super().__init__()
+        
         self.title("Traffic Monitor")
         self.geometry("1280x720")
-        self.configure(bg="#202020")
+        self.configure(bg="#D2D2D2")
 
         self.brokers = brokers or ["localhost:9092"]
         self.topic = topic
@@ -193,19 +196,26 @@ class MonitorApp(tk.Tk):
         self.after(200, self._poll_queues)
 
     def _build_layout(self):
+        """ Định khung bố cục"""
+
+        # Đây không phải định kiểu 1x1 #
         self.columnconfigure(1, weight=1)
         self.rowconfigure(1, weight=1)
 
+        ### Tiêu đề ###
         self.header = HeaderBar(self)
         self.header.grid(row=0, column=0, columnspan=3, sticky="nsew")
 
+        ### Sidebar ###
         cameras = ["Camera 1 - Highway", "Camera 2 - Downtown", "Camera 3 - Airport", "Camera 4 - Industrial"]
         self.sidebar = CameraSidebar(self, cameras=cameras, on_select=self._handle_camera_select)
         self.sidebar.grid(row=1, column=0, sticky="nsew")
 
+        ### Panel ở giữa ###
         self.video_panel = VideoPanel(self)
         self.video_panel.grid(row=1, column=1, sticky="nsew", padx=(0, 12), pady=12)
 
+        ### Nhật ký realtime ###
         self.log_panel = VehicleLog(self)
         self.log_panel.grid(row=1, column=2, sticky="nsew", padx=(12, 0), pady=12)
 
@@ -215,6 +225,9 @@ class MonitorApp(tk.Tk):
         )
 
     def _start_consumer_thread(self):
+        """
+            Gọi một luồng thực hiện consume dữ liệu đã tracking, từ kafka.
+        """
         def consume():
             try:
                 consumer = KafkaConsumer(
@@ -223,7 +236,9 @@ class MonitorApp(tk.Tk):
                     value_deserializer=lambda m: json.loads(m.decode("utf-8")),
                     auto_offset_reset="latest"
                 )
+
                 self.header.set_status("● Connected", "#4caf50")
+
                 for message in consumer:
                     if self.stop_event.is_set():
                         break
