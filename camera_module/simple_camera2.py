@@ -34,7 +34,7 @@ while cap.isOpened():
     frame_base64 = base64.b64encode(buffer).decode('utf-8')
 
     data = json.dumps({
-        "camera_id": "cam1",
+        "camera_id": "cam2",
         "frame": frame_base64,
         "timestamp": time.time()
     })
