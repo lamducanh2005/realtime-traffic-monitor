@@ -1,0 +1,196 @@
+import sys
+import cv2
+import base64
+import json
+import time
+from datetime import datetime
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
+                             QHBoxLayout, QLabel, QPushButton, QFileDialog, QTabWidget)
+from PyQt5.QtCore import QThread, pyqtSignal, Qt
+from PyQt5.QtGui import QImage, QPixmap
+from kafka import KafkaProducer
+from ultralytics import YOLO
+import numpy as np
+from .cam_thread import CameraThread
+
+class VideoDisplay(QWidget):
+    """Widget hiển thị video"""
+    
+    def __init__(self):
+        super().__init__()
+        
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.setLayout(layout)
+        
+        self.video_label = QLabel()
+        self.video_label.setAlignment(Qt.AlignCenter)
+        self.video_label.setStyleSheet("""
+            QLabel {
+                background-color: #000000;
+                border: 2px solid #3e3e42;
+                border-radius: 5px;
+            }
+        """)
+        self.video_label.setMinimumSize(800, 600)
+        
+        layout.addWidget(self.video_label)
+    
+    def show_placeholder(self, camera_id):
+        """Hiển thị placeholder"""
+        placeholder = np.zeros((600, 800, 3), dtype=np.uint8)
+        cv2.putText(placeholder, f"Camera {camera_id}", 
+                   (200, 250), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (100, 100, 100), 2)
+        cv2.putText(placeholder, "Cho phep tai video de bat dau", 
+                   (150, 350), cv2.FONT_HERSHEY_SIMPLEX, 1, (100, 100, 100), 2)
+        self.update_frame(placeholder)
+    
+    def update_frame(self, frame):
+        """Cập nhật frame"""
+        if frame is None:
+            return
+        
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        h, w, ch = rgb_frame.shape
+        bytes_per_line = ch * w
+        
+        qt_image = QImage(rgb_frame.data, w, h, bytes_per_line, QImage.Format_RGB888)
+        
+        scaled_pixmap = QPixmap.fromImage(qt_image).scaled(
+            self.video_label.size(),
+            Qt.KeepAspectRatio,
+            Qt.SmoothTransformation
+        )
+        
+        self.video_label.setPixmap(scaled_pixmap)
+
+class ControlPanel(QWidget):
+    """Panel điều khiển camera"""
+    
+    def __init__(self, camera_id, on_load, on_toggle):
+        super().__init__()
+        self.camera_id = camera_id
+        self.setStyleSheet("background-color: #252526; border-radius: 5px")
+        self.setFixedWidth(200)
+        
+        layout = QVBoxLayout()
+        layout.setContentsMargins(15, 10, 15, 10)
+        layout.setSpacing(10)
+        self.setLayout(layout)
+        
+        # File info
+        self.info_label = QLabel(f"Camera {camera_id}")
+        self.info_label.setStyleSheet("color: #cccccc; border: none; font-size: 11px")
+        self.info_label.setWordWrap(True)
+        layout.addWidget(self.info_label)
+        
+        # Load button
+        self.load_btn = QPushButton(f"📁 Tải video")
+        self.load_btn.setMinimumHeight(40)
+        self.load_btn.clicked.connect(on_load)
+        layout.addWidget(self.load_btn)
+        
+        # Control button
+        self.control_btn = QPushButton("▶️ Start")
+        self.control_btn.setMinimumHeight(40)
+        self.control_btn.clicked.connect(on_toggle)
+        self.control_btn.setEnabled(False)
+        layout.addWidget(self.control_btn)
+        
+        # Stretch để đẩy các button lên trên
+        layout.addStretch()
+    
+    def set_loaded(self, filename):
+        """Cập nhật khi tải video"""
+        self.info_label.setText(f"Camera {self.camera_id}: {filename}")
+        self.control_btn.setEnabled(True)
+    
+    def set_running(self, is_running):
+        """Cập nhật trạng thái running"""
+        if is_running:
+            self.control_btn.setText("⏹️ Stop")
+            self.load_btn.setEnabled(False)
+        else:
+            self.control_btn.setText("▶️ Start")
+            self.load_btn.setEnabled(True)
+
+
+class CameraPanel(QWidget):
+    """Panel cho một camera - gồm header, video display, control"""
+    
+    def __init__(self, camera_id):
+        super().__init__()
+        self.camera_id = camera_id
+        self.thread = None
+        self.video_path = None
+        
+        self.main_layout = QHBoxLayout()
+        self.main_layout.setContentsMargins(10, 10, 10, 10)
+        self.main_layout.setSpacing(10)
+        self.setLayout(self.main_layout)
+        
+        self.setup_ui()
+
+    def setup_ui(self):
+        
+        # Video Display
+        self.video_display = VideoDisplay()
+        self.video_display.show_placeholder(self.camera_id)
+        self.main_layout.addWidget(self.video_display, stretch=1)
+
+        # Control Panel
+        self.control_panel = ControlPanel(
+            self.camera_id,
+            on_load=self.load_video,
+            on_toggle=self.toggle_camera
+        )
+        self.main_layout.addWidget(self.control_panel, stretch=0)
+
+    def load_video(self):
+        """Chọn video từ một đường dẫn"""
+        
+        video_path, _ = QFileDialog.getOpenFileName(
+            parent=self, 
+            caption="Chọn video", 
+            directory="", 
+            filter="Video Files (*.mp4 *.avi *.mov)"
+        )
+        
+        if video_path:
+            self.video_path = video_path
+            filename = video_path.split('/')[-1]
+            self.control_panel.set_loaded(filename)
+
+    def start_camera(self):
+        """Khởi động camera"""
+        
+        if not self.video_path:
+            return
+        
+        model_path = "resources/models/yolo11n.pt"
+        
+        self.thread = CameraThread(self.camera_id, self.video_path, model_path)
+        self.thread.frame_ready.connect(self.video_display.update_frame)
+        self.thread.start()
+        
+        self.control_panel.set_running(True)
+
+    def toggle_camera(self):
+        """Bật/tắt camera"""
+        if self.thread is None or not self.thread.running:
+            self.start_camera()
+        else:
+            self.stop_camera()
+    
+    def stop_camera(self):
+        """Dừng camera"""
+        
+        if self.thread:
+            self.thread.stop()
+            self.control_panel.set_running(False)
+
+    def close_camera(self):
+        """Đóng camera khi tab bị đóng"""
+
+        if self.thread and self.thread.running:
+            self.stop_camera()
