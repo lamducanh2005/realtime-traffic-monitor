@@ -1,11 +1,9 @@
-import sys
 import cv2
 import base64
 import json
 import time
 from datetime import datetime
-from PyQt5.QtCore import QThread, pyqtSignal, Qt
-from PyQt5.QtGui import QImage, QPixmap
+from PyQt5.QtCore import QThread, pyqtSignal
 from kafka import KafkaProducer
 from ultralytics import YOLO
 import numpy as np
@@ -82,11 +80,8 @@ class CameraThread(QThread):
             
             # Thêm thông tin camera và timestamp
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            camera_name = "Duong Thuong"
             
-            # cv2.putText(annotated_frame, f"Camera {self.camera_id} - {camera_name}", 
-            #            (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-            cv2.putText(annotated_frame, timestamp, 
+            cv2.putText(annotated_frame, f"Cam {self.camera_id} - {timestamp}", 
                        (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
             
             # Emit frame để hiển thị
