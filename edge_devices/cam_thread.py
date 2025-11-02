@@ -3,7 +3,7 @@ import base64
 import json
 import time
 from datetime import datetime
-from PyQt5.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import QThread, pyqtSignal
 from kafka import KafkaProducer
 from ultralytics import YOLO
 import numpy as np

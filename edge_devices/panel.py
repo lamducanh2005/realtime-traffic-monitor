@@ -1,15 +1,7 @@
-import sys
 import cv2
-import base64
-import json
-import time
-from datetime import datetime
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
-                             QHBoxLayout, QLabel, QPushButton, QFileDialog, QTabWidget)
-from PyQt5.QtCore import QThread, pyqtSignal, Qt
-from PyQt5.QtGui import QImage, QPixmap
-from kafka import KafkaProducer
-from ultralytics import YOLO
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFileDialog
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QImage, QPixmap
 import numpy as np
 from .cam_thread import CameraThread
 
@@ -24,7 +16,7 @@ class VideoDisplay(QWidget):
         self.setLayout(layout)
         
         self.video_label = QLabel()
-        self.video_label.setAlignment(Qt.AlignCenter)
+        self.video_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.video_label.setStyleSheet("""
             QLabel {
                 background-color: #000000;
@@ -54,12 +46,12 @@ class VideoDisplay(QWidget):
         h, w, ch = rgb_frame.shape
         bytes_per_line = ch * w
         
-        qt_image = QImage(rgb_frame.data, w, h, bytes_per_line, QImage.Format_RGB888)
+        qt_image = QImage(rgb_frame.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
         
         scaled_pixmap = QPixmap.fromImage(qt_image).scaled(
             self.video_label.size(),
-            Qt.KeepAspectRatio,
-            Qt.SmoothTransformation
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation
         )
         
         self.video_label.setPixmap(scaled_pixmap)

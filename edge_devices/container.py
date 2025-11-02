@@ -1,5 +1,5 @@
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QTabWidget
-from PyQt5.QtCore import Qt
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QTabWidget
+from PyQt6.QtCore import Qt
 from .panel import CameraPanel
 
 class EdgeDeviceContainer(QWidget):
@@ -41,13 +41,14 @@ class EdgeDeviceContainer(QWidget):
             background-color: #393E46;
             border-radius: 5px;
         """)
-        title.setAlignment(Qt.AlignCenter)
+        # use PyQt6 AlignmentFlag
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         return title
     
     def __tab_widget_ui(self):
         tab_widget = QTabWidget()
-        tab_widget.setTabPosition(QTabWidget.North)
+        tab_widget.setTabPosition(QTabWidget.TabPosition.North)
         tab_widget.setStyleSheet("""
             color: white
         """)

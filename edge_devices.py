@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QApplication, QMainWindow
+from PyQt6.QtWidgets import QApplication, QMainWindow
 import sys
 from edge_devices import EdgeDeviceContainer
 
@@ -12,7 +12,7 @@ class EdgeDeviceWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Edge Devices")
-        self.setGeometry(100, 100, 1200, 1000)
+        self.setGeometry(100, 100, 1200, 900)
 
         self.setStyleSheet("""
             QMainWindow {
@@ -33,4 +33,4 @@ if __name__ == "__main__":
     app.setStyle('Fusion')
     window = EdgeDeviceWindow()
     window.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
