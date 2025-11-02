@@ -42,7 +42,8 @@ while cap.isOpened():
     # Gửi đến kafka
     producer.send(
         topic=CAMERA_OUT_TOPIC,
-        value=frame_base64
+        value=data,
+        key=b"cam1"
     )
 
     elapsed = time.time() - last_time
