@@ -1,6 +1,56 @@
 from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QHBoxLayout, QTabWidget
 from PyQt6.QtCore import Qt
-from .monitor_tab import MonitorTab
+
+from .event_stack import EventStack
+from .video_panel import VideoPanel
+from .statistic_panel import StatisticPanel
+
+
+class MonitorTab(QWidget):
+    def __init__(self, camera_id: str):
+        super().__init__()
+        self.camera_id = camera_id
+
+        self.main_layout = QVBoxLayout()
+        self.main_layout.setContentsMargins(6, 6, 6, 6)
+        self.main_layout.setSpacing(6)
+        self.setLayout(self.main_layout)
+
+        self.setup_ui()
+    
+    def setup_ui(self):
+
+        # Video + event stack
+        content = QHBoxLayout()
+        content.setSpacing(5)
+
+        # Video
+        self.video_panel = VideoPanel(self.camera_id)
+        content.addWidget(self.video_panel, stretch=3)
+
+        # Event stack
+        self.event_stack = EventStack(self.camera_id)
+        self.event_stack.setMinimumWidth(240)
+        content.addWidget(self.event_stack, stretch=1)
+
+        self.main_layout.addLayout(content, stretch=8)
+
+        # Stats bar
+        self.stat_panel = StatisticPanel()
+        self.main_layout.addWidget(self.stat_panel, stretch=0)
+
+    def closeEvent(self, event):
+        """Called automatically when widget is closed"""
+        try:
+            self.video_panel.close()
+        except Exception:
+            pass
+        try:
+            self.event_stack.close()
+        except Exception:
+            pass
+        if event:
+            event.accept()
 
 
 class TrafficMonitorContainer(QWidget):
