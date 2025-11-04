@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 
 CAMERA_TRACK_TOPIC = "camera_track"
-BOOTSTRAP_SERVER = "localhost:9092"
+BOOTSTRAP_SERVER = ["192.168.0.106:9092", "192.168.0.106:9093", "192.168.0.106:9094"]
 
 class HeaderBar(QWidget):
     def __init__(self):

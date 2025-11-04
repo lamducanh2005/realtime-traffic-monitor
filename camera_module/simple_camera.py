@@ -7,12 +7,16 @@ import time
 
 CAMERA_OUT_TOPIC = "camera_raw"
 VIDEO_PATH = "../data/street.mp4"
-BOOTSTRAP_SERVER = "localhost:9092"
+BOOTSTRAP_SERVER = ["192.168.0.106:9092", "192.168.0.106:9093", "192.168.0.106:9094"]
 # FPS = 30
 
 producer = KafkaProducer(
     bootstrap_servers=BOOTSTRAP_SERVER,
-    value_serializer=lambda x: x.encode('utf-8')
+    value_serializer=lambda x: x.encode('utf-8'),
+    compression_type='lz4',
+    linger_ms=10,
+    batch_size=32 * 1024,
+    max_request_size=5 * 1024 * 1024
 )
 
 cap = cv2.VideoCapture(VIDEO_PATH)
