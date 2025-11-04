@@ -9,7 +9,7 @@ import threading
 import base64
 import json
 
-CAMERA_TRACK_TOPIC = "camera_track"
+CAMERA_TRACK_TOPIC = "camera_raw"
 BOOTSTRAP_SERVER = "localhost:9092"
 
 class HeaderBar(QWidget):
