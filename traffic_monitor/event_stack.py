@@ -10,7 +10,7 @@ from kafka import KafkaConsumer
 
 
 CAMERA_EVENT_TOPIC = "cam_event"
-BOOTSTRAP_SERVER = "localhost:9092"
+BOOTSTRAP_SERVER = [f"localhost:{i}" for i in range(9092, 9092 + 12)]
 
 
 class EventItem(QWidget):

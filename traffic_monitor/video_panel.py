@@ -9,7 +9,7 @@ import json
 from kafka import KafkaConsumer
 
 CAMERA_STREAM_TOPIC = "cam_streaming"
-BOOTSTRAP_SERVER = "localhost:9092"
+BOOTSTRAP_SERVER = [f"localhost:{i}" for i in range(9092, 9092 + 12)]
 
 class VideoPanel(QWidget):
     frame_updated = pyqtSignal(object)
