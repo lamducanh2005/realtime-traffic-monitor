@@ -9,7 +9,7 @@ from ultralytics import YOLO
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 
-BOOTSTRAP_SERVER = [f"localhost:{i}" for i in range(9092, 9092 + 24)]
+BOOTSTRAP_SERVER = [f"localhost:{i}" for i in range(9092, 9092 + 12)]
 STREAMING_TOPIC = "cam_streaming"
 TRACKING_TOPIC = "cam_tracking"
 
@@ -34,8 +34,8 @@ class CameraThread(QThread):
             bootstrap_servers=BOOTSTRAP_SERVER,
             value_serializer=lambda x: json.dumps(x).encode('utf-8'),
             compression_type='lz4',
-            batch_size=16384,
-            linger_ms=10,
+            batch_size=256000,
+            linger_ms=100,
         )
         
         # Cấu hình theo loại camera
@@ -93,7 +93,7 @@ class CameraThread(QThread):
 
             # 2) Đẩy task tracking vào executor (chạy riêng, không chặn)
             # copy frame để tránh race
-            self.executor.submit(self._process_tracking, frame.copy(), timestamp)
+            # self.executor.submit(self._process_tracking, frame.copy(), timestamp)
             
             # Control FPS
             elapsed = time.time() - last_time
@@ -107,7 +107,11 @@ class CameraThread(QThread):
     def _send_streaming(self, frame, timestamp):
         """Gửi dữ liệu nhẹ (frame) tới STREAMING_TOPIC — nhanh, nén nhỏ"""
         try:
-            _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 50])
+            # Giảm resolution xuống 480px - cân bằng giữa chất lượng và kích thước (từ ~10KB xuống ~4-5KB)
+            streaming_frame = cv2.resize(frame, (720, int(frame.shape[0] * 720 / frame.shape[1])))
+            
+            # Giảm JPEG quality xuống 35 để nén vừa phải, vẫn rõ ràng
+            _, buffer = cv2.imencode('.jpg', streaming_frame, [cv2.IMWRITE_JPEG_QUALITY, 45])
             frame_base64 = base64.b64encode(buffer).decode('utf-8')
             streaming_data = {
                 "camera_id": f"cam{self.camera_id}",

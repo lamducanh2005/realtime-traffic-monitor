@@ -1,15 +1,17 @@
 from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout
 from PyQt6.QtGui import QImage, QPixmap
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 import cv2
 import numpy as np
 import threading
 import base64
 import json
 from kafka import KafkaConsumer
+from collections import deque
+import time
 
 CAMERA_STREAM_TOPIC = "cam_streaming"
-BOOTSTRAP_SERVER = [f"192.168.0.106:{i}" for i in range(9092, 9092 + 24)]
+BOOTSTRAP_SERVER = [f"192.168.0.106:{i}" for i in range(9092, 9092 + 12)]
 
 class VideoPanel(QWidget):
     frame_updated = pyqtSignal(object)
@@ -22,6 +24,11 @@ class VideoPanel(QWidget):
         self.consumer_thread = None
         self.is_running = False
         
+        # Frame Buffer (FIFO queue) để chống giật lag
+        self.frame_buffer = deque(maxlen=150)  # Buffer 150 frames (5s @ 30fps)
+        self.buffer_ready = False
+        self.target_buffer_size = 150  # 5 giây @ 30fps
+        
         self.setStyleSheet("background-color: #1e1e1e")
         self.main_layout = QVBoxLayout()
         self.main_layout.setContentsMargins(10, 10, 10, 10)
@@ -29,6 +36,7 @@ class VideoPanel(QWidget):
         
         self.setup_ui()
         self.start_kafka_consumer()
+        self.start_display_timer()
 
     def setup_ui(self):
         self.video_label = QLabel()
@@ -45,15 +53,23 @@ class VideoPanel(QWidget):
 
     def show_placeholder(self):
         placeholder = np.zeros((480, 640, 3), dtype=np.uint8)
-        cv2.putText(placeholder, f"Cam {self.camera_id} No Signal", (20, 240), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (150, 150, 150), 2)
+        cv2.putText(placeholder, f"Cam {self.camera_id} Buffering...", (20, 240), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (150, 150, 150), 2)
         self.update_frame(placeholder)
 
     def start_kafka_consumer(self):
+        """Consumer thread: Nhận frame từ Kafka và đẩy vào buffer"""
         self.is_running = True
         self.consumer_thread = threading.Thread(target=self._consume_frames, daemon=True)
         self.consumer_thread.start()
 
+    def start_display_timer(self):
+        """Timer thread: Lấy frame từ buffer và hiển thị đều đặn (30fps)"""
+        self.display_timer = QTimer()
+        self.display_timer.timeout.connect(self._display_next_frame)
+        self.display_timer.start(33)  # ~30fps (1000ms / 30 = 33ms)
+
     def _consume_frames(self):
+        """Consumer: Nhận frame từ Kafka và đẩy vào buffer nhanh nhất có thể"""
         try:
             self.consumer = KafkaConsumer(
                 self.topic,
@@ -61,7 +77,8 @@ class VideoPanel(QWidget):
                 auto_offset_reset='latest',
                 enable_auto_commit=True,
                 fetch_min_bytes=1,
-                fetch_max_wait_ms=100
+                fetch_max_wait_ms=100,
+                max_poll_records=500  # Lấy nhiều message/lần để buffer nhanh
             )
 
             for msg in self.consumer:
@@ -88,10 +105,37 @@ class VideoPanel(QWidget):
                     frame = None
 
                 if frame is not None:
-                    self.frame_updated.emit(frame)
+                    # Đẩy vào buffer thay vì hiển thị ngay
+                    self.frame_buffer.append(frame)
+                    
+                    # Đánh dấu buffer đã sẵn sàng sau khi đủ 5s
+                    if not self.buffer_ready and len(self.frame_buffer) >= self.target_buffer_size:
+                        self.buffer_ready = True
+                        print(f"[{self.camera_id}] Buffer ready! ({len(self.frame_buffer)} frames)")
 
         except Exception as e:
             print(f"Kafka consumer error ({self.camera_id}): {e}")
+
+    def _display_next_frame(self):
+        """Lấy frame từ buffer và hiển thị đều đặn (gọi mỗi 33ms = 30fps)"""
+        if not self.buffer_ready:
+            # Hiển thị tiến trình buffering
+            if len(self.frame_buffer) > 0:
+                placeholder = np.zeros((480, 640, 3), dtype=np.uint8)
+                progress = len(self.frame_buffer) / self.target_buffer_size * 100
+                cv2.putText(placeholder, f"Cam {self.camera_id} Buffering... {progress:.0f}%", 
+                           (20, 240), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+                self.update_frame(placeholder)
+            return
+
+        # Lấy frame từ buffer (FIFO)
+        if len(self.frame_buffer) > 0:
+            frame = self.frame_buffer.popleft()
+            self.frame_updated.emit(frame)
+        else:
+            # Buffer cạn → chờ thêm
+            self.buffer_ready = False
+            print(f"[{self.camera_id}] Buffer underrun! Re-buffering...")
 
     def update_frame(self, frame):
         if frame is None:
@@ -108,6 +152,8 @@ class VideoPanel(QWidget):
 
     def close(self):
         self.is_running = False
+        if hasattr(self, 'display_timer'):
+            self.display_timer.stop()
         if self.consumer:
             try:
                 self.consumer.close()
