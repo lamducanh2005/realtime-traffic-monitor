@@ -11,7 +11,7 @@ from collections import deque
 import time
 
 CAMERA_STREAM_TOPIC = "cam_streaming"
-BOOTSTRAP_SERVER = [f"192.168.0.106:{i}" for i in range(9092, 9092 + 12)]
+BOOTSTRAP_SERVER = [f"10.11.7.180:{i}" for i in range(9092, 9092 + 12)]
 
 class VideoPanel(QWidget):
     frame_updated = pyqtSignal(object)
