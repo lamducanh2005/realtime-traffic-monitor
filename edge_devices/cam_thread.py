@@ -9,7 +9,7 @@ from ultralytics import YOLO
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 
-BOOTSTRAP_SERVER = [f"10.11.7.180:{i}" for i in range(9092, 9092 + 12)]
+BOOTSTRAP_SERVER = [f"localhost:{i}" for i in range(9092, 9092 + 12)]
 STREAMING_TOPIC = "cam_streaming"
 TRACKING_TOPIC = "cam_tracking"
 
@@ -74,22 +74,21 @@ class CameraThread(QThread):
             # timestamp
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-            # 1) Phát trực tiếp (nhẹ): emit frame nhanh (tùy có thể resize)
-            try:
-                quick_frame = cv2.resize(frame, (640, int(frame.shape[0] * 640 / frame.shape[1])))
-            except Exception:
-                quick_frame = frame
-            # Nếu vừa có annotated frame, ưu tiên hiển thị annotated trong khoảng thời gian ngắn
-            # để tránh bị ghi đè bởi quick_frame liên tiếp.
+            # Tạo frame với timestamp để hiển thị và gửi
+            annotated_frame = frame.copy()
+            cv2.putText(annotated_frame, f"Cam {self.camera_id} - {timestamp}", 
+                       (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+            # Kiểm tra xem có nên hiển thị frame mới không
             now = time.time()
-            show_quick = (now - self._last_annotated_ts) >= self._annotated_display_duration
+            show_frame = (now - self._last_annotated_ts) >= self._annotated_display_duration
 
-            if show_quick:
-                # emit ngay để hiển thị trực tiếp
-                self.frame_ready.emit(quick_frame.copy())
+            if show_frame:
+                # Emit frame đã có timestamp để hiển thị UI
+                self.frame_ready.emit(annotated_frame.copy())
 
-            # gửi luồng nhẹ (chỉ frame nhỏ, nhanh) luôn (không block)
-            self._send_streaming(quick_frame.copy(), timestamp)
+            # Gửi frame có timestamp tới Kafka
+            self._send_streaming(annotated_frame.copy(), timestamp)
 
             # 2) Đẩy task tracking vào executor (chạy riêng, không chặn)
             # copy frame để tránh race
@@ -105,13 +104,10 @@ class CameraThread(QThread):
         self.cap.release()
         
     def _send_streaming(self, frame, timestamp):
-        """Gửi dữ liệu nhẹ (frame) tới STREAMING_TOPIC — nhanh, nén nhỏ"""
+        """Gửi dữ liệu streaming tới STREAMING_TOPIC với chất lượng gốc"""
         try:
-            # Giảm resolution xuống 480px - cân bằng giữa chất lượng và kích thước (từ ~10KB xuống ~4-5KB)
-            streaming_frame = cv2.resize(frame, (720, int(frame.shape[0] * 720 / frame.shape[1])))
-            
-            # Giảm JPEG quality xuống 35 để nén vừa phải, vẫn rõ ràng
-            _, buffer = cv2.imencode('.jpg', streaming_frame, [cv2.IMWRITE_JPEG_QUALITY, 45])
+            # Frame đã có timestamp rồi, encode trực tiếp
+            _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
             frame_base64 = base64.b64encode(buffer).decode('utf-8')
             streaming_data = {
                 "camera_id": f"cam{self.camera_id}",
@@ -164,8 +160,13 @@ class CameraThread(QThread):
                     }
                     objects.append(obj)
 
-            # encode original frame for tracking topic
-            _, orig_buffer = cv2.imencode('.jpg', original_frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            # Ghi timestamp lên frame gốc trước khi encode
+            tracking_frame = original_frame.copy()
+            cv2.putText(tracking_frame, f"Cam {self.camera_id} - {timestamp}", 
+                       (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+            
+            # encode với chất lượng gốc
+            _, orig_buffer = cv2.imencode('.jpg', tracking_frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
             orig_frame_base64 = base64.b64encode(orig_buffer).decode('utf-8')
 
             tracking_data = {

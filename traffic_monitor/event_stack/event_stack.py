@@ -10,7 +10,7 @@ from .event_item import EventItem
 
 
 CAMERA_EVENT_TOPIC = "cam_event"
-BOOTSTRAP_SERVER = [f"10.11.7.180:{i}" for i in range(9092, 9092 + 12)]
+BOOTSTRAP_SERVER = [f"localhost:{i}" for i in range(9092, 9092 + 12)]
 
 
 class EventStack(QWidget):
