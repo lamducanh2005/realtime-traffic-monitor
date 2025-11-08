@@ -1,6 +1,7 @@
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QTabWidget
 from PyQt6.QtCore import Qt
-from .panel import CameraPanel
+from .panel import MainPanel
+
 
 class EdgeDeviceContainer(QWidget):
     
@@ -79,7 +80,7 @@ class EdgeDeviceContainer(QWidget):
         """)
         
         for i in range(1, 4 + 1):
-            camera_panel = CameraPanel(i)
+            camera_panel = MainPanel(i)
             self.camera_panels.append(camera_panel)
             tab_widget.addTab(camera_panel, f"Camera {i}")
 
@@ -90,3 +91,4 @@ class EdgeDeviceContainer(QWidget):
         for panel in self.camera_panels:
             if panel.thread and panel.thread.running:
                 panel.stop_camera()
+

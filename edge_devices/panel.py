@@ -164,7 +164,7 @@ class ControlPanel(QWidget):
             self.load_btn.setEnabled(True)
 
 
-class CameraPanel(QWidget):
+class MainPanel(QWidget):
     """Panel cho một camera - gồm header, video display, control"""
     
     def __init__(self, camera_id):

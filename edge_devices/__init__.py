@@ -1,1 +1,1 @@
-from .container import EdgeDeviceContainer
+from .main_window import EdgeDeviceWindow
