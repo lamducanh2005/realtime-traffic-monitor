@@ -50,7 +50,32 @@ class EdgeDeviceContainer(QWidget):
         tab_widget = QTabWidget()
         tab_widget.setTabPosition(QTabWidget.TabPosition.North)
         tab_widget.setStyleSheet("""
-            color: white
+            QTabWidget::pane {
+                background: #111;
+            }
+            QTabBar::tab {
+                background: #2b2f33;
+                color: #ddd;
+                padding: 8px 16px;
+                border: 1px solid transparent;
+                border-top-left-radius: 6px;
+                border-top-right-radius: 6px;
+                min-width: 110px;
+                margin-right: 0px;
+            }
+            QTabBar::tab:hover {
+                background: #3a4045;
+            }
+            QTabBar::tab:selected {
+                background: #111;
+                color: white;
+            }
+            QTabBar::tab:!selected {
+                margin-top: 0px; /* tạo hiệu ứng tab nổi */
+            }
+            QTabBar::close-button {
+                image: url(close.png); /* nếu có icon đóng */
+            }
         """)
         
         for i in range(1, 4 + 1):

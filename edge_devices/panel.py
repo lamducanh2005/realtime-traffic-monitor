@@ -31,14 +31,26 @@ class VideoDisplay(QWidget):
     def show_placeholder(self, camera_id):
         """Hiển thị placeholder"""
         placeholder = np.zeros((600, 800, 3), dtype=np.uint8)
-        cv2.putText(placeholder, f"Camera {camera_id}", 
+        cv2.putText(
+            placeholder, f"Camera {camera_id}", 
                    (200, 250), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (100, 100, 100), 2)
-        cv2.putText(placeholder, "Cho phep tai video de bat dau", 
+        
+        cv2.putText(placeholder, "Tai len video de bat dau", 
                    (150, 350), cv2.FONT_HERSHEY_SIMPLEX, 1, (100, 100, 100), 2)
+        
         self.update_frame(placeholder)
     
     def update_frame(self, frame):
-        """Cập nhật frame"""
+        """
+            Thực hiện cập nhật frame
+
+            Args:
+                frame: Khung hình màu BGR theo thứ tự (H, W, 3).
+            
+            Returns:
+                None
+        """
+
         if frame is None:
             return
         
@@ -62,7 +74,51 @@ class ControlPanel(QWidget):
     def __init__(self, camera_id, on_load, on_toggle):
         super().__init__()
         self.camera_id = camera_id
-        self.setStyleSheet("background-color: #252526; border-radius: 5px")
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #252526;
+                border-radius: 8px;
+            }
+            QLabel {
+                color: #cccccc;
+                font-size: 20px;
+                background: transparent;
+            }
+            QPushButton {
+                background-color: #3a3f44;
+                color: #f0f0f0;
+                border: 1px solid #4b4f54;
+                border-radius: 6px;
+                padding: 8px 12px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #50565b;
+            }
+            
+            QPushButton:pressed {
+                background-color: #2f3336;
+                padding-top: 10px; /* subtle pressed effect */
+                padding-bottom: 6px;
+            }
+            QPushButton:disabled {
+                background-color: #2b2b2b;
+                color: #777;
+                border-color: #2b2b2b;
+            }
+            QPushButton#control_btn {
+                background-color: #2b8de9;
+                border: 1px solid #2166b2;
+                font-weight: 600;
+            }
+            QPushButton#control_btn:hover {
+                background-color: #3a99ef;
+            }
+            QPushButton#control_btn:pressed {
+                background-color: #1f5fb0;
+            }
+        """)
+
         self.setFixedWidth(200)
         
         layout = QVBoxLayout()
@@ -72,13 +128,14 @@ class ControlPanel(QWidget):
         
         # File info
         self.info_label = QLabel(f"Camera {camera_id}")
-        self.info_label.setStyleSheet("color: #cccccc; border: none; font-size: 11px")
         self.info_label.setWordWrap(True)
         layout.addWidget(self.info_label)
         
         # Load button
-        self.load_btn = QPushButton(f"📁 Tải video")
+        self.load_btn = QPushButton("📁 Tải video")
         self.load_btn.setMinimumHeight(40)
+        self.load_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+
         self.load_btn.clicked.connect(on_load)
         layout.addWidget(self.load_btn)
         
@@ -94,16 +151,16 @@ class ControlPanel(QWidget):
     
     def set_loaded(self, filename):
         """Cập nhật khi tải video"""
-        self.info_label.setText(f"Camera {self.camera_id}: {filename}")
+        # self.info_label.setText(f"Camera {self.camera_id}: {filename}")
         self.control_btn.setEnabled(True)
     
     def set_running(self, is_running):
         """Cập nhật trạng thái running"""
         if is_running:
-            self.control_btn.setText("⏹️ Stop")
+            self.control_btn.setText("⏹️ Dừng")
             self.load_btn.setEnabled(False)
         else:
-            self.control_btn.setText("▶️ Start")
+            self.control_btn.setText("▶️ Bắt đầu")
             self.load_btn.setEnabled(True)
 
 
