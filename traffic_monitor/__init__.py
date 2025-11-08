@@ -1,1 +1,1 @@
-from .container import TrafficMonitorContainer
+from .main_window import TrafficMonitorWindow

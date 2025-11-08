@@ -1,9 +1,9 @@
 from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QHBoxLayout, QTabWidget
 from PyQt6.QtCore import Qt
 
-from .event_stack import EventStack
-from .video_panel import VideoPanel
-from .statistic_panel import StatisticPanel
+from .event_stack.event_stack import EventStack
+from .video_panel.video_panel import VideoPanel
+from .statistic_panel.statistic_panel import StatisticPanel
 
 
 class MonitorTab(QWidget):
