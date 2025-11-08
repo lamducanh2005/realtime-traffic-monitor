@@ -201,7 +201,7 @@ class MainPanel(QWidget):
         video_path, _ = QFileDialog.getOpenFileName(
             parent=self, 
             caption="Chọn video", 
-            directory="", 
+            directory="resources/data/", 
             filter="Video Files (*.mp4 *.avi *.mov)"
         )
         
