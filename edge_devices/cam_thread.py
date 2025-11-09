@@ -9,7 +9,7 @@ from ultralytics import YOLO
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 
-BOOTSTRAP_SERVER = [f"localhost:{i}" for i in range(9092, 9092 + 12)]
+BOOTSTRAP_SERVER = [f"localhost:{i}" for i in range(9092, 9092 + 3)]
 STREAMING_TOPIC = "cam_streaming"
 TRACKING_TOPIC = "cam_tracking"
 
@@ -74,25 +74,19 @@ class CameraThread(QThread):
             # timestamp
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-            # Tạo frame với timestamp để hiển thị và gửi
+            # Viết ngày tháng giờ lên frame nhìn cho giống camera
             annotated_frame = frame.copy()
             cv2.putText(annotated_frame, f"Cam {self.camera_id} - {timestamp}", 
                        (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
-            # Kiểm tra xem có nên hiển thị frame mới không
-            now = time.time()
-            show_frame = (now - self._last_annotated_ts) >= self._annotated_display_duration
+            # Hiển thị lên màn hình
+            self.frame_ready.emit(annotated_frame.copy())
 
-            if show_frame:
-                # Emit frame đã có timestamp để hiển thị UI
-                self.frame_ready.emit(annotated_frame.copy())
-
-            # Gửi frame có timestamp tới Kafka
+            # Gửi frame tới Kafka
             self._send_streaming(annotated_frame.copy(), timestamp)
 
-            # 2) Đẩy task tracking vào executor (chạy riêng, không chặn)
-            # copy frame để tránh race
-            # self.executor.submit(self._process_tracking, frame.copy(), timestamp)
+            # Chạy riêng tác vụ tracking
+            self.executor.submit(self._process_tracking, frame.copy(), timestamp)
             
             # Control FPS
             elapsed = time.time() - last_time
@@ -104,18 +98,20 @@ class CameraThread(QThread):
         self.cap.release()
         
     def _send_streaming(self, frame, timestamp):
-        """Gửi dữ liệu streaming tới STREAMING_TOPIC với chất lượng gốc"""
+        """Gửi dữ liệu streaming tới STREAMING_TOPIC"""
         try:
-            # Frame đã có timestamp rồi, encode trực tiếp
-            _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
+            # Chuyển thành base64
+            _, buffer = cv2.imencode('.jpg', frame)
             frame_base64 = base64.b64encode(buffer).decode('utf-8')
+            
             streaming_data = {
                 "camera_id": f"cam{self.camera_id}",
-                "frame": frame_base64,
                 "timestamp": timestamp,
-                "type": "intersection" if self.is_intersection else "street"
+                "type": "intersection" if self.is_intersection else "street",
+                "frame": frame_base64,
             }
-            # send async
+            
+            # gửi đi async
             self.producer.send(
                 topic=STREAMING_TOPIC,
                 value=streaming_data,
@@ -135,46 +131,50 @@ class CameraThread(QThread):
                 persist=True,
                 verbose=False
             )
-            annotated_frame = results[0].plot()
-            cv2.putText(annotated_frame, f"Cam {self.camera_id} - {timestamp}", 
-                       (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+            # annotated_frame = results[0].plot()
+            # cv2.putText(annotated_frame, f"Cam {self.camera_id} - {timestamp}", 
+            #            (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
             # emit annotated frame (cập nhật UI khi tracking xong)
-            self.frame_ready.emit(annotated_frame)
+            # self.frame_ready.emit(annotated_frame)
             # ghi lại thời điểm annotated được emit để tránh quick_frame ghi đè ngay
-            try:
-                self._last_annotated_ts = time.time()
-            except Exception:
-                pass
+            # try:
+            #     self._last_annotated_ts = time.time()
+            # except Exception:
+            #     pass
 
             # build objects
+            
             objects = []
             if results[0].boxes is not None and getattr(results[0].boxes, "id", None) is not None:
                 boxes = results[0].boxes.xyxy.cpu().numpy()
                 ids = results[0].boxes.id.cpu().numpy()
                 classes = results[0].boxes.cls.cpu().numpy()
                 for i in range(len(boxes)):
+                    x1, y1, x2, y2 = boxes[i]
+                    x, y, w, h = int(x1), int(y1), int(x2 - x1), int(y2 - y1)
                     obj = {
-                        "id": int(ids[i]),
-                        "box": boxes[i].tolist(),
+                        "id": str(ids[i]),
+                        "box": [x, y, w, h],
                         "type": results[0].names[int(classes[i])]
                     }
                     objects.append(obj)
 
             # Ghi timestamp lên frame gốc trước khi encode
             tracking_frame = original_frame.copy()
-            cv2.putText(tracking_frame, f"Cam {self.camera_id} - {timestamp}", 
-                       (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+            # cv2.putText(tracking_frame, f"Cam {self.camera_id} - {timestamp}", 
+            #            (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
             
             # encode với chất lượng gốc
-            _, orig_buffer = cv2.imencode('.jpg', tracking_frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
+            _, orig_buffer = cv2.imencode('.jpg', tracking_frame)
             orig_frame_base64 = base64.b64encode(orig_buffer).decode('utf-8')
 
             tracking_data = {
                 "camera_id": f"cam{self.camera_id}",
-                "frame": orig_frame_base64,
                 "objects": objects,
                 "timestamp": timestamp,
-                "type": "intersection" if self.is_intersection else "street"
+                "type": "intersection" if self.is_intersection else "street",
+                "frame": orig_frame_base64,
             }
 
             self.producer.send(
@@ -182,16 +182,18 @@ class CameraThread(QThread):
                 value=tracking_data,
                 key=f"cam{self.camera_id}".encode('utf-8')
             )
+
         except Exception as e:
-            print("Tracking task error:", e)
+            # print("Tracking task error:", e)
+            pass
 
     def stop(self):
         """Dừng camera thread"""
         self.running = False
         self.wait()
-        # shutdown executor để chờ các task tracking hoàn tất (hoặc dùng wait=False nếu muốn kill)
+        
         try:
-            self.executor.shutdown(wait=True)
+            self.executor.shutdown(wait=False)
         except Exception:
             pass
         if self.producer:

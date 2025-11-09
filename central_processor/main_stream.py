@@ -5,18 +5,17 @@ from pyflink.common import WatermarkStrategy, Types
 from pyflink.datastream.functions import MapFunction
 from pyflink.common import WatermarkStrategy, Duration
 from pyflink.common.watermark_strategy import TimestampAssigner
-import json
-import base64
-import cv2
-import numpy as np
-from ultralytics import YOLO
-import time
 from pathlib import Path
+from .plate_processor import ExpandObject, DetectPlate, VoteBestPlate
+import json
 
-F2K_JAR = Path(r"C:\Users\Admin\Documents\Study\_INT3229 Big Data\final project\jars\flink-connector-kafka-4.0.1-2.0.jar")
-KC_JAR = Path(r"C:\Users\Admin\Documents\Study\_INT3229 Big Data\final project\jars\kafka-clients-3.4.0.jar")
 
-KAFKA_BOOTSTRAP_SERVER = None
+F2K_JAR = Path(r"C:\Users\Admin\Documents\Study\_INT3229 Big Data\final project\resources\jars\flink-connector-kafka-4.0.1-2.0.jar")
+KC_JAR = Path(r"C:\Users\Admin\Documents\Study\_INT3229 Big Data\final project\resources\jars\kafka-clients-3.4.0.jar")
+
+KAFKA_BOOTSTRAP_SERVER = "localhost:9092,localhost:9093,localhost:9094"
+KAFKA_TRACKING_TOPIC = "cam_tracking"
+KAFKA_EVENTS_TOPIC = "cam_event"
 
 
 env : StreamExecutionEnvironment = None
@@ -26,7 +25,7 @@ kafka_sink : KafkaSink = None
 
 def set_up():
     """
-        Thực hiện thiết đặt mô trường:
+        Thực hiện thiết đặt môi trường:
             - Khởi động môi trường
             - Thêm file jar
             - Cài các tham số
@@ -48,23 +47,56 @@ def set_up():
     kafka_source = (
         KafkaSource.builder()
         .set_bootstrap_servers(KAFKA_BOOTSTRAP_SERVER)
+        .set_topics(KAFKA_TRACKING_TOPIC)
+        .set_group_id("plate")
+        .set_starting_offsets(KafkaOffsetsInitializer.latest())
+        .set_value_only_deserializer(SimpleStringSchema())
         .build()
     )
 
     kafka_sink = (
         KafkaSink.builder()
         .set_bootstrap_servers(KAFKA_BOOTSTRAP_SERVER)
+        .set_record_serializer(
+            KafkaRecordSerializationSchema.builder()
+            .set_topic(KAFKA_EVENTS_TOPIC)
+            .set_value_serialization_schema(SimpleStringSchema())
+            .build()
+        )
         .build()
     )
 
 
 def process_stream():
-    pass
+    global env, kafka_source, kafka_sink
+
+    stream = env.from_source(
+        kafka_source,
+        WatermarkStrategy.no_watermarks(),
+        "plate_recognize",
+        Types.STRING()
+    )
+
+    (
+        stream
+        .flat_map(
+            ExpandObject(), 
+            output_type=Types.STRING()
+        )
+        # .key_by(lambda x: x["camera_id"]) # Liệu có nhất thiết phải key by trong trường hợp này?
+        # .map(DetectPlate())
+        # .filter(lambda x: x is not None)
+        # .key_by(lambda x: (x["cam_id"], x["obj_id"]))
+        # .process(VoteBestPlate())
+        # .map(lambda x: json.dumps(x))
+        .sink_to(kafka_sink)
+
+    )
 
 def execute_job():
     global env
     print("Executing job...")
-    env.execute("main-stream")
+    env.execute("main_stream")
 
 
 
