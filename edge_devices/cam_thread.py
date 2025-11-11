@@ -74,6 +74,9 @@ class CameraThread(QThread):
             # timestamp
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+            # Resize frame về 1280x720
+            frame = cv2.resize(frame, (1280, 720))
+
             # Viết ngày tháng giờ lên frame nhìn cho giống camera
             annotated_frame = frame.copy()
             cv2.putText(annotated_frame, f"Cam {self.camera_id} - {timestamp}", 
@@ -100,8 +103,9 @@ class CameraThread(QThread):
     def _send_streaming(self, frame, timestamp):
         """Gửi dữ liệu streaming tới STREAMING_TOPIC"""
         try:
-            # Chuyển thành base64
-            _, buffer = cv2.imencode('.jpg', frame)
+            # Chuyển thành base64, giảm chất lượng ảnh
+            encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 30]
+            _, buffer = cv2.imencode('.jpg', frame, encode_param)
             frame_base64 = base64.b64encode(buffer).decode('utf-8')
             
             streaming_data = {
@@ -166,7 +170,8 @@ class CameraThread(QThread):
             #            (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
             
             # encode với chất lượng gốc
-            _, orig_buffer = cv2.imencode('.jpg', tracking_frame)
+            encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 50]
+            _, orig_buffer = cv2.imencode('.jpg', tracking_frame, encode_param)
             orig_frame_base64 = base64.b64encode(orig_buffer).decode('utf-8')
 
             tracking_data = {
