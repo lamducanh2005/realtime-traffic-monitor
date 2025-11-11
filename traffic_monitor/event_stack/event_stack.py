@@ -10,7 +10,7 @@ from .event_item import EventItem
 
 
 CAMERA_EVENT_TOPIC = "cam_event"
-BOOTSTRAP_SERVER = [f"localhost:{i}" for i in range(9092, 9092 + 12)]
+BOOTSTRAP_SERVER = [f"192.168.0.106:{i}" for i in range(9092, 9092 + 3)]
 
 
 class EventStack(QWidget):
@@ -58,11 +58,10 @@ class EventStack(QWidget):
 
     def _on_event_received(self, payload: dict):
         try:
-            plate = payload.get('plate') or '--'
-            vehicle_type = payload.get('vehicle_type') or '--'
+            num_plate = payload.get('num_plate') or '--'
             timestamp = payload.get('timestamp') or ''
-            thumbnail = payload.get('thumbnail', None)
-            item = EventItem(plate=plate, vehicle_type=vehicle_type, timestamp=timestamp, thumbnail=thumbnail)
+            plate_frame = payload.get('plate_frame', None)
+            item = EventItem(num_plate=num_plate, timestamp=timestamp, plate_frame=plate_frame)
             self.add_event(item)
         except Exception:
             pass
@@ -94,28 +93,27 @@ class EventStack(QWidget):
                 if data.get('camera_id') != self.camera_id:
                     continue
 
-                # If message contains event info (plate, raw_frame, timestamp)
-                plate = data.get('plate') or data.get('plate_number') or '--'
-                vehicle_type = data.get('vehicle_type') or '--'
+                # Extract data from new message structure
+                num_plate = data.get('num_plate') or '--'
                 timestamp = data.get('timestamp') or ''
-                frame_b64 = data.get('raw_frame') or data.get('frame')
-                thumbnail = None
+                frame_b64 = data.get('obj_frame')
+                plate_frame = None
+
                 if frame_b64:
                     try:
                         b = base64.b64decode(frame_b64)
                         arr = np.frombuffer(b, dtype=np.uint8)
                         frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-                        # create small thumbnail crop/resize
+                        # Resize to match EventItem thumbnail size
                         if frame is not None:
-                            thumbnail = cv2.resize(frame, (160, 120))
+                            plate_frame = cv2.resize(frame, (80, 80))
                     except Exception:
-                        thumbnail = None
+                        plate_frame = None
 
                 payload = {
-                    'plate': plate,
-                    'vehicle_type': vehicle_type,
+                    'num_plate': num_plate,
                     'timestamp': timestamp,
-                    'thumbnail': thumbnail,
+                    'plate_frame': plate_frame,
                 }
 
                 # emit signal (thread-safe, queued) to update GUI
@@ -124,7 +122,7 @@ class EventStack(QWidget):
                 except Exception:
                     # last-resort fallback to direct add (shouldn't be needed)
                     try:
-                        self.add_event(EventItem(plate=plate, vehicle_type=vehicle_type, timestamp=timestamp, thumbnail=thumbnail))
+                        self.add_event(EventItem(num_plate=num_plate, timestamp=timestamp, plate_frame=plate_frame))
                     except Exception:
                         pass
 
