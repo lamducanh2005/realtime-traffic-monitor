@@ -6,12 +6,12 @@ import numpy as np
 import base64
 from .utils import Base64
 
-plate_model = YOLO('resources/models/license_plate_detector.pt')
+# plate_model = YOLO('resources/models/license_plate_detector.pt')
 
-ocr_model = YOLO('resources/models/Charcter-LP.pt')
+# ocr_model = YOLO('resources/models/Charcter-LP.pt')
 
 
-def detect_and_crop_plate(vehicle_frame):
+def detect_and_crop_plate(vehicle_frame, plate_model):
     """
         Thực hiện tìm và crop phần biển số của phương tiện
         Args:
@@ -35,7 +35,7 @@ def detect_and_crop_plate(vehicle_frame):
     return cropped_frame
 
 
-def ocr_plate(plate_frame):
+def ocr_plate(plate_frame, ocr_model):
     """
     Thực hiện trích xuất thông tin biển số từ ảnh biển số phương tiện
     Args:
@@ -101,28 +101,33 @@ class ExpandObject(FlatMapFunction):
                 "obj_frame": obj_frame
             })
     
-class DetectPlate(MapFunction):
+class DetectPlate(FlatMapFunction):
 
-    def map(self, value):
+    def open(self, runtime_context):
+        self.plate_model = YOLO('resources/models/license_plate_detector.pt')
+        self.ocr_model = YOLO('resources/models/Charcter-LP.pt')
+
+    def flat_map(self, value):
         obj_data = json.loads(value)
 
         obj_frame = Base64.decode_frame(obj_data["obj_frame"])
-        plate_frame = detect_and_crop_plate(obj_frame)
+        plate_frame = detect_and_crop_plate(obj_frame, self.plate_model)
 
         if plate_frame is None:
-            return None
+            return
 
-        num_plate = ocr_plate(plate_frame)
+        num_plate = ocr_plate(plate_frame, self.ocr_model)
 
         if num_plate is None:
-            return None
+            return
         
         obj_data["num_plate"] = num_plate
         obj_data["plate_frame"] = Base64.encode_frame(plate_frame)
 
-        return json.dumps(obj_data)
+        yield json.dumps(obj_data)
     
 class VoteBestPlate(KeyedProcessFunction):
 
     def open(self, config):
         self.plate_history = self.get_runtime_context().get_state("plates")
+    

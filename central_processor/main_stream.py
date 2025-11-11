@@ -1,19 +1,18 @@
 from pyflink.datastream import StreamExecutionEnvironment, RuntimeExecutionMode
 from pyflink.datastream.connectors.kafka import KafkaSource, KafkaOffsetsInitializer, KafkaSink, KafkaRecordSerializationSchema
 from pyflink.common.serialization import SimpleStringSchema
-from pyflink.common import WatermarkStrategy, Types
+from pyflink.common import WatermarkStrategy, Types, Configuration
 from pyflink.datastream.functions import MapFunction
-from pyflink.common import WatermarkStrategy, Duration
 from pyflink.common.watermark_strategy import TimestampAssigner
 from pathlib import Path
 from .plate_processor import ExpandObject, DetectPlate, VoteBestPlate
-import json
+import os
 
 
 F2K_JAR = Path(r"C:\Users\Admin\Documents\Study\_INT3229 Big Data\final project\resources\jars\flink-connector-kafka-4.0.1-2.0.jar")
 KC_JAR = Path(r"C:\Users\Admin\Documents\Study\_INT3229 Big Data\final project\resources\jars\kafka-clients-3.4.0.jar")
 
-KAFKA_BOOTSTRAP_SERVER = "localhost:9092,localhost:9093,localhost:9094"
+KAFKA_BOOTSTRAP_SERVER = "192.168.0.106:9092,192.168.0.106:9093,192.168.0.106:9094"
 KAFKA_TRACKING_TOPIC = "cam_tracking"
 KAFKA_EVENTS_TOPIC = "cam_event"
 
@@ -33,9 +32,8 @@ def set_up():
     """
     global env, kafka_source, kafka_sink
 
-    # Khởi động môi trường
     env = StreamExecutionEnvironment.get_execution_environment()
-
+    
     # Thêm file jar cho 2 cái này
     env.add_jars(F2K_JAR.as_uri(), KC_JAR.as_uri())
 
@@ -83,8 +81,11 @@ def process_stream():
             ExpandObject(), 
             output_type=Types.STRING()
         )
-        # .key_by(lambda x: x["camera_id"]) # Liệu có nhất thiết phải key by trong trường hợp này?
-        # .map(DetectPlate())
+        # .key_by(lambda x: (json.loads(x)["camera_id"], json.loads(x)["obj_id"])) # Liệu có nhất thiết phải key by trong trường hợp này?
+        .flat_map(
+            DetectPlate(),
+            output_type=Types.STRING()
+        )
         # .filter(lambda x: x is not None)
         # .key_by(lambda x: (x["cam_id"], x["obj_id"]))
         # .process(VoteBestPlate())
