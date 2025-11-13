@@ -12,7 +12,7 @@ import os
 F2K_JAR = Path(r"C:\Users\Admin\Documents\Study\_INT3229 Big Data\final project\resources\jars\flink-connector-kafka-4.0.1-2.0.jar")
 KC_JAR = Path(r"C:\Users\Admin\Documents\Study\_INT3229 Big Data\final project\resources\jars\kafka-clients-3.4.0.jar")
 
-KAFKA_BOOTSTRAP_SERVER = "192.168.0.106:9092,192.168.0.106:9093,192.168.0.106:9094"
+KAFKA_BOOTSTRAP_SERVER = "localhost:9092,localhost:9093,localhost:9094"
 KAFKA_TRACKING_TOPIC = "cam_tracking"
 KAFKA_EVENTS_TOPIC = "cam_event"
 

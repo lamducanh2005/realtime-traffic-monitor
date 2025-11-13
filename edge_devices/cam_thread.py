@@ -9,6 +9,12 @@ from ultralytics import YOLO
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 
+"""
+NOTE: Các frame không có detection trong phần tracking thì không gửi về
+
+"""
+
+
 BOOTSTRAP_SERVER = [f"localhost:{i}" for i in range(9092, 9092 + 3)]
 STREAMING_TOPIC = "cam_streaming"
 TRACKING_TOPIC = "cam_tracking"
@@ -34,8 +40,8 @@ class CameraThread(QThread):
             bootstrap_servers=BOOTSTRAP_SERVER,
             value_serializer=lambda x: json.dumps(x).encode('utf-8'),
             compression_type='lz4',
-            batch_size=256000,
-            linger_ms=100,
+            batch_size=25600,
+            linger_ms=10,
         )
         
         # Cấu hình theo loại camera
@@ -135,19 +141,6 @@ class CameraThread(QThread):
                 persist=True,
                 verbose=False
             )
-
-            # annotated_frame = results[0].plot()
-            # cv2.putText(annotated_frame, f"Cam {self.camera_id} - {timestamp}", 
-            #            (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-            # emit annotated frame (cập nhật UI khi tracking xong)
-            # self.frame_ready.emit(annotated_frame)
-            # ghi lại thời điểm annotated được emit để tránh quick_frame ghi đè ngay
-            # try:
-            #     self._last_annotated_ts = time.time()
-            # except Exception:
-            #     pass
-
-            # build objects
             
             objects = []
             if results[0].boxes is not None and getattr(results[0].boxes, "id", None) is not None:
@@ -163,15 +156,14 @@ class CameraThread(QThread):
                         "type": results[0].names[int(classes[i])]
                     }
                     objects.append(obj)
-
-            # Ghi timestamp lên frame gốc trước khi encode
-            tracking_frame = original_frame.copy()
-            # cv2.putText(tracking_frame, f"Cam {self.camera_id} - {timestamp}", 
-            #            (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
             
+            # Không nhận diện được thì không cần gửi về kafka
+            if len(objects) == 0:
+                return
+
             # encode với chất lượng gốc
             encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 50]
-            _, orig_buffer = cv2.imencode('.jpg', tracking_frame, encode_param)
+            _, orig_buffer = cv2.imencode('.jpg', original_frame.copy(), encode_param)
             orig_frame_base64 = base64.b64encode(orig_buffer).decode('utf-8')
 
             tracking_data = {
