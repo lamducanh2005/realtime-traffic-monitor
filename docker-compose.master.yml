@@ -70,32 +70,32 @@ services:
         KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka1:29092,kafka2:29093,kafka3:29094
         KAFKA_CLUSTERS_0_ZOOKEEPER: localhost:2181
 
-  jobmanager:
-    image: apache/flink:1.18-scala_2.12
-    container_name: flink-jobmanager
-    command: jobmanager
-    environment:
-      - JOB_MANAGER_RPC_ADDRESS=jobmanager
-    ports:
-      - "8081:8081"
-    expose:
-      - "6123"
-    volumes:
-      - ./flink-checkpoints:/opt/flink/checkpoints
-      # - ./resources/jars:/opt/flink/lib
+  # jobmanager:
+  #   image: apache/flink:1.18-scala_2.12
+  #   container_name: flink-jobmanager
+  #   command: jobmanager
+  #   environment:
+  #     - JOB_MANAGER_RPC_ADDRESS=jobmanager
+  #   ports:
+  #     - "8081:8081"
+  #   expose:
+  #     - "6123"
+  #   volumes:
+  #     - ./flink-checkpoints:/opt/flink/checkpoints
+  #     # - ./resources/jars:/opt/flink/lib
 
-  taskmanager:
-    image: apache/flink:1.18-scala_2.12
-    container_name: flink-taskmanager
-    depends_on:
-      - jobmanager
-    command: taskmanager
-    expose:
-      - "6121"
-      - "6122"
-    environment:
-      - JOB_MANAGER_RPC_ADDRESS=jobmanager
-      - TASK_MANAGER_NUMBER_OF_TASK_SLOTS=5
-    volumes:
-      - ./flink-checkpoints:/opt/flink/checkpoints
-      # - ./resources/jars:/opt/flink/lib
+  # taskmanager:
+  #   image: apache/flink:1.18-scala_2.12
+  #   container_name: flink-taskmanager
+  #   depends_on:
+  #     - jobmanager
+  #   command: taskmanager
+  #   expose:
+  #     - "6121"
+  #     - "6122"
+  #   environment:
+  #     - JOB_MANAGER_RPC_ADDRESS=jobmanager
+  #     - TASK_MANAGER_NUMBER_OF_TASK_SLOTS=5
+  #   volumes:
+  #     - ./flink-checkpoints:/opt/flink/checkpoints
+  #     # - ./resources/jars:/opt/flink/lib
