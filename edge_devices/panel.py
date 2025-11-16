@@ -216,7 +216,7 @@ class MainPanel(QWidget):
         if not self.video_path:
             return
         
-        model_path = "resources/models/yolo11n.pt"
+        model_path = "resources/models/yolo11n.onnx"
         
         self.thread = CameraThread(self.camera_id, self.video_path, model_path)
         self.thread.frame_ready.connect(self.video_display.update_frame)

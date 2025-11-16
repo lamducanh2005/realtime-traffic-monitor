@@ -5,19 +5,10 @@ import time
 from datetime import datetime
 from PyQt6.QtCore import QThread, pyqtSignal
 from kafka import KafkaProducer
-from ultralytics import YOLO
-import numpy as np
-from concurrent.futures import ThreadPoolExecutor
-
-"""
-NOTE: Các frame không có detection trong phần tracking thì không gửi về
-
-"""
 
 
 BOOTSTRAP_SERVER = [f"localhost:{i}" for i in range(9092, 9092 + 3)]
 STREAMING_TOPIC = "cam_streaming"
-TRACKING_TOPIC = "cam_tracking"
 
 class CameraThread(QThread):
     """Thread xử lý video cho mỗi camera"""
@@ -27,13 +18,8 @@ class CameraThread(QThread):
         super().__init__()
         self.camera_id = camera_id
         self.video_path = video_path
-        self.model_path = model_path
         self.running = False
         self.cap = None
-        self.model = None
-
-        self._last_annotated_ts = 0.0
-        self._annotated_display_duration = 1.0
         
         # Kafka producer
         self.producer = KafkaProducer(
@@ -46,9 +32,6 @@ class CameraThread(QThread):
         
         # Cấu hình theo loại camera
         self.is_intersection = (camera_id % 2 == 0)
-
-        # Executor cho task tracking (chạy song song)
-        self.executor = ThreadPoolExecutor(max_workers=1)
         
     def run(self):
         """Chạy camera thread"""
@@ -59,9 +42,6 @@ class CameraThread(QThread):
         if not self.cap.isOpened():
             print(f"Không thể mở video {self.video_path}")
             return
-            
-        # Load YOLO model
-        self.model = YOLO(self.model_path)
         
         fps = self.cap.get(cv2.CAP_PROP_FPS)
         frame_delay = 1 / fps if fps > 0 else 1/30
@@ -93,9 +73,6 @@ class CameraThread(QThread):
 
             # Gửi frame tới Kafka
             self._send_streaming(annotated_frame.copy(), timestamp)
-
-            # Chạy riêng tác vụ tracking
-            self.executor.submit(self._process_tracking, frame.copy(), timestamp)
             
             # Control FPS
             elapsed = time.time() - last_time
@@ -110,7 +87,7 @@ class CameraThread(QThread):
         """Gửi dữ liệu streaming tới STREAMING_TOPIC"""
         try:
             # Chuyển thành base64, giảm chất lượng ảnh
-            encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 30]
+            encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 50]
             _, buffer = cv2.imencode('.jpg', frame, encode_param)
             frame_base64 = base64.b64encode(buffer).decode('utf-8')
             
@@ -130,68 +107,10 @@ class CameraThread(QThread):
         except Exception as e:
             print("Streaming send error:", e)
 
-    def _process_tracking(self, original_frame, timestamp):
-        """Thực hiện tracking nặng ở background và gửi cam_tracking; cũng emit annotated frame khi xong"""
-        try:
-            results = self.model.track(
-                original_frame,
-                classes=[2, 3, 5, 7],
-                conf=0.5,
-                iou=0.4,
-                persist=True,
-                verbose=False
-            )
-            
-            objects = []
-            if results[0].boxes is not None and getattr(results[0].boxes, "id", None) is not None:
-                boxes = results[0].boxes.xyxy.cpu().numpy()
-                ids = results[0].boxes.id.cpu().numpy()
-                classes = results[0].boxes.cls.cpu().numpy()
-                for i in range(len(boxes)):
-                    x1, y1, x2, y2 = boxes[i]
-                    x, y, w, h = int(x1), int(y1), int(x2 - x1), int(y2 - y1)
-                    obj = {
-                        "id": str(ids[i]),
-                        "box": [x, y, w, h],
-                        "type": results[0].names[int(classes[i])]
-                    }
-                    objects.append(obj)
-            
-            # Không nhận diện được thì không cần gửi về kafka
-            if len(objects) == 0:
-                return
-
-            # encode với chất lượng gốc
-            encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 50]
-            _, orig_buffer = cv2.imencode('.jpg', original_frame.copy(), encode_param)
-            orig_frame_base64 = base64.b64encode(orig_buffer).decode('utf-8')
-
-            tracking_data = {
-                "camera_id": f"cam{self.camera_id}",
-                "objects": objects,
-                "timestamp": timestamp,
-                "type": "intersection" if self.is_intersection else "street",
-                "frame": orig_frame_base64,
-            }
-
-            self.producer.send(
-                topic=TRACKING_TOPIC,
-                value=tracking_data,
-                key=f"cam{self.camera_id}".encode('utf-8')
-            )
-
-        except Exception as e:
-            # print("Tracking task error:", e)
-            pass
-
     def stop(self):
         """Dừng camera thread"""
         self.running = False
         self.wait()
         
-        try:
-            self.executor.shutdown(wait=False)
-        except Exception:
-            pass
         if self.producer:
             self.producer.close()

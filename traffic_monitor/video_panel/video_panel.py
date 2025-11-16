@@ -3,15 +3,68 @@ from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 import cv2
 import numpy as np
-import threading
 import base64
 import json
 from kafka import KafkaConsumer
 from collections import deque
 import time
+from multiprocessing import Process, Queue
+import os
+import signal
 
-CAMERA_STREAM_TOPIC = "cam_streaming"
+CAMERA_STREAM_TOPIC = "cam_tracking"
 BOOTSTRAP_SERVER = [f"localhost:{i}" for i in range(9092, 9092 + 3)]
+
+
+def kafka_consumer_worker(camera_id: str, frame_queue: Queue, topic: str, bootstrap_servers: list):
+    """
+    Process riêng biệt chạy Kafka consumer
+    Nhận frame từ Kafka và đẩy vào Queue
+    """
+    try:
+        consumer = KafkaConsumer(
+            topic,
+            bootstrap_servers=bootstrap_servers,
+            auto_offset_reset='latest',
+            enable_auto_commit=True,
+            fetch_min_bytes=1,
+            fetch_max_wait_ms=1000,
+            max_poll_records=5000
+        )
+
+        for msg in consumer:
+            try:
+                data = json.loads(msg.value.decode('utf-8'))
+            except Exception:
+                continue
+
+            # Filter by camera id
+            if data.get('camera_id') != camera_id:
+                continue
+
+            frame_b64 = data.get('raw_frame') or data.get('frame')
+            if not frame_b64:
+                continue
+
+            try:
+                frame_bytes = base64.b64decode(frame_b64)
+                arr = np.frombuffer(frame_bytes, dtype=np.uint8)
+                frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+            except Exception:
+                frame = None
+
+            if frame is not None:
+                # Đẩy vào Queue (thread-safe)
+                try:
+                    frame_queue.put(frame, block=False)
+                except:
+                    pass  # Queue full, bỏ qua frame
+
+    except Exception as e:
+        print(f"Kafka consumer error ({camera_id}): {e}")
+    finally:
+        consumer.close()
+
 
 class VideoPanel(QWidget):
     frame_updated = pyqtSignal(object)
@@ -20,14 +73,16 @@ class VideoPanel(QWidget):
         super().__init__()
         self.camera_id = camera_id
         self.topic = topic
-        self.consumer = None
-        self.consumer_thread = None
+        
+        # Queue để communicate giữa Kafka process và UI process
+        self.frame_queue = Queue(maxsize=300)
+        self.consumer_process = None
         self.is_running = False
         
         # Frame Buffer (FIFO queue) để chống giật lag
-        self.frame_buffer = deque(maxlen=150)  # Buffer 150 frames (5s @ 30fps)
+        self.frame_buffer = deque(maxlen=300)
         self.buffer_ready = False
-        self.target_buffer_size = 150  # 5 giây @ 30fps
+        self.target_buffer_size = 150
         
         self.setStyleSheet("background-color: #1e1e1e")
         self.main_layout = QVBoxLayout()
@@ -35,7 +90,7 @@ class VideoPanel(QWidget):
         self.setLayout(self.main_layout)
         
         self.setup_ui()
-        self.start_kafka_consumer()
+        self.start_kafka_consumer_process()
         self.start_display_timer()
 
     def setup_ui(self):
@@ -45,10 +100,10 @@ class VideoPanel(QWidget):
         self.video_label.setMinimumSize(640, 480)
         self.main_layout.addWidget(self.video_label)
 
-         # connect signal
+        # Connect signal
         self.frame_updated.connect(self.update_frame)
 
-        # show placeholder
+        # Show placeholder
         self.show_placeholder()
 
     def show_placeholder(self):
@@ -56,70 +111,39 @@ class VideoPanel(QWidget):
         cv2.putText(placeholder, f"Cam {self.camera_id} Buffering...", (20, 240), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (150, 150, 150), 2)
         self.update_frame(placeholder)
 
-    def start_kafka_consumer(self):
-        """Consumer thread: Nhận frame từ Kafka và đẩy vào buffer"""
+    def start_kafka_consumer_process(self):
+        """Khởi động Kafka consumer trong process riêng biệt"""
         self.is_running = True
-        self.consumer_thread = threading.Thread(target=self._consume_frames, daemon=True)
-        self.consumer_thread.start()
+        self.consumer_process = Process(
+            target=kafka_consumer_worker,
+            args=(self.camera_id, self.frame_queue, self.topic, BOOTSTRAP_SERVER),
+            daemon=True
+        )
+        self.consumer_process.start()
+        print(f"[{self.camera_id}] Kafka consumer process started (PID: {self.consumer_process.pid})")
 
     def start_display_timer(self):
-        """Timer thread: Lấy frame từ buffer và hiển thị đều đặn (30fps)"""
+        """Timer: Lấy frame từ Queue và hiển thị đều đặn (30fps)"""
         self.display_timer = QTimer()
-        self.display_timer.timeout.connect(self._display_next_frame)
-        self.display_timer.start(33)  # ~30fps (1000ms / 30 = 33ms)
+        self.display_timer.timeout.connect(self._pull_and_display_frame)
+        self.display_timer.start(33)  # ~30fps
 
-    def _consume_frames(self):
-        """Consumer: Nhận frame từ Kafka và đẩy vào buffer nhanh nhất có thể"""
-        try:
-            self.consumer = KafkaConsumer(
-                self.topic,
-                bootstrap_servers=BOOTSTRAP_SERVER,
-                auto_offset_reset='latest',
-                enable_auto_commit=True,
-                fetch_min_bytes=1,
-                fetch_max_wait_ms=100,
-                max_poll_records=500  # Lấy nhiều message/lần để buffer nhanh
-            )
+    def _pull_and_display_frame(self):
+        """Pull frame từ Queue sang buffer"""
+        # Lấy hết frame từ Queue vào buffer
+        while not self.frame_queue.empty():
+            try:
+                frame = self.frame_queue.get(block=False)
+                self.frame_buffer.append(frame)
+                
+                if not self.buffer_ready and len(self.frame_buffer) >= self.target_buffer_size:
+                    self.buffer_ready = True
+                    print(f"[{self.camera_id}] Buffer ready! ({len(self.frame_buffer)} frames)")
+            except:
+                break
 
-            for msg in self.consumer:
-                if not self.is_running:
-                    break
-                try:
-                    data = json.loads(msg.value.decode('utf-8'))
-                except Exception:
-                    continue
-
-                # filter by camera id (expecting camera_id like 'cam1')
-                if data.get('camera_id') != self.camera_id:
-                    continue
-
-                frame_b64 = data.get('raw_frame') or data.get('frame')
-                if not frame_b64:
-                    continue
-
-                try:
-                    frame_bytes = base64.b64decode(frame_b64)
-                    arr = np.frombuffer(frame_bytes, dtype=np.uint8)
-                    frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-                except Exception:
-                    frame = None
-
-                if frame is not None:
-                    # Đẩy vào buffer thay vì hiển thị ngay
-                    self.frame_buffer.append(frame)
-                    
-                    # Đánh dấu buffer đã sẵn sàng sau khi đủ 5s
-                    if not self.buffer_ready and len(self.frame_buffer) >= self.target_buffer_size:
-                        self.buffer_ready = True
-                        print(f"[{self.camera_id}] Buffer ready! ({len(self.frame_buffer)} frames)")
-
-        except Exception as e:
-            print(f"Kafka consumer error ({self.camera_id}): {e}")
-
-    def _display_next_frame(self):
-        """Lấy frame từ buffer và hiển thị đều đặn (gọi mỗi 33ms = 30fps)"""
+        # Hiển thị frame từ buffer
         if not self.buffer_ready:
-            # Hiển thị tiến trình buffering
             if len(self.frame_buffer) > 0:
                 placeholder = np.zeros((480, 640, 3), dtype=np.uint8)
                 progress = len(self.frame_buffer) / self.target_buffer_size * 100
@@ -128,12 +152,10 @@ class VideoPanel(QWidget):
                 self.update_frame(placeholder)
             return
 
-        # Lấy frame từ buffer (FIFO)
         if len(self.frame_buffer) > 0:
             frame = self.frame_buffer.popleft()
             self.frame_updated.emit(frame)
         else:
-            # Buffer cạn → chờ thêm
             self.buffer_ready = False
             print(f"[{self.camera_id}] Buffer underrun! Re-buffering...")
 
@@ -150,19 +172,22 @@ class VideoPanel(QWidget):
         except Exception:
             pass
 
-    def close(self):
+    def closeEvent(self, event):
+        """Cleanup khi close widget"""
         self.is_running = False
+        
         if hasattr(self, 'display_timer'):
             self.display_timer.stop()
-        if self.consumer:
-            try:
-                self.consumer.close()
-            except Exception:
-                pass
-        if self.consumer_thread:
-            try:
-                self.consumer_thread.join(timeout=1)
-            except Exception:
-                pass
+        
+        if self.consumer_process and self.consumer_process.is_alive():
+            self.consumer_process.terminate()
+            self.consumer_process.join(timeout=2)
+            if self.consumer_process.is_alive():
+                self.consumer_process.kill()
+            print(f"[{self.camera_id}] Kafka consumer process terminated")
+        
+        event.accept()
 
-   
+    def close(self):
+        """Alias cho closeEvent"""
+        self.closeEvent(None)
