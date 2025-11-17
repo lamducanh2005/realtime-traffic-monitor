@@ -5,6 +5,7 @@ import json
 import numpy as np
 import base64
 from .utils import Base64
+import torch
 
 # plate_model = YOLO('resources/models/license_plate_detector.pt')
 
@@ -22,7 +23,7 @@ def detect_and_crop_plate(vehicle_frame, plate_model):
     
     # Nhận diện vị trí biển số
     plate_detection = plate_model(vehicle_frame)[0].boxes.data.tolist()
-    if len(plate_detection) != 1:
+    if len(plate_detection) < 1:
         return None
     else:
         plate_detection = plate_detection[0]
@@ -100,6 +101,67 @@ class ExpandObject(FlatMapFunction):
                 "obj_id": str(obj["id"]),
                 "obj_frame": obj_frame
             })
+
+class DetectVehicle(FlatMapFunction):
+    
+    def __init__(self):
+        self.model = None
+        self.device = None
+
+    def open(self, runtime_context):
+        self.model = YOLO("resources/models/yolo11n.onnx")
+        self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+
+    def flat_map(self, value):
+        data = json.loads(value)
+        cam_id = data.get("camera_id")
+        timestamp = data.get("timestamp")
+        frame = Base64.decode_frame(data['frame'])
+
+        with torch.no_grad():
+            results = self.model.track(
+                frame,
+                persist=True,
+                classes=[2, 3, 5, 7],
+                imgsz=480,
+                conf=0.4,
+                iou=0.5,
+                verbose=False,
+                half=True,
+                device=self.device,
+                tracker='bytetrack.yaml',
+            )
+        
+        if results[0].boxes.id is None:
+            return
+
+        boxes = results[0].boxes.xywh.cpu().numpy()
+        track_ids = results[0].boxes.id.cpu().numpy().astype(str)
+
+        frame_h, frame_w = frame.shape[:2]
+
+        for box, track_id in zip(boxes, track_ids):
+            x, y, box_w, box_h = map(int, box)
+
+            x = (x - box_w) // 2
+            y = (y - box_h) // 2
+
+            x = max(0, min(x, frame_w))
+            y = max(0, min(y, frame_h))
+            w = min(box_w, frame_w - x)
+            h = min(box_h, frame_h - y)
+
+            
+            obj_frame_b64 = Base64.encode_frame(frame[y:y+h, x:x+w])
+
+
+            yield json.dumps({
+                "camera_id": cam_id,
+                "timestamp": timestamp,
+                "obj_id": track_id,
+                "obj_frame": obj_frame_b64
+            })
+
     
 class DetectPlate(FlatMapFunction):
 

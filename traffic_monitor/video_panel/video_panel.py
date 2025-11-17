@@ -12,7 +12,7 @@ from multiprocessing import Process, Queue
 import os
 import signal
 
-CAMERA_STREAM_TOPIC = "cam_tracking"
+CAMERA_STREAM_TOPIC = "cam_raw"
 BOOTSTRAP_SERVER = [f"localhost:{i}" for i in range(9092, 9092 + 3)]
 
 

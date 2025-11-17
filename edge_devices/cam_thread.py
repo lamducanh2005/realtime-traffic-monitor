@@ -8,7 +8,7 @@ from kafka import KafkaProducer
 
 
 BOOTSTRAP_SERVER = [f"localhost:{i}" for i in range(9092, 9092 + 3)]
-STREAMING_TOPIC = "cam_streaming"
+STREAMING_TOPIC = "cam_raw"
 
 class CameraThread(QThread):
     """Thread xử lý video cho mỗi camera"""

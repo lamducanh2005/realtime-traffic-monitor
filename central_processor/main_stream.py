@@ -4,6 +4,7 @@ from pyflink.common.serialization import SimpleStringSchema
 from pyflink.common import WatermarkStrategy, Types
 from pathlib import Path
 from .detect_processor import FrameProcessor
+from .plate_processor import DetectVehicle, DetectPlate
 import os
 import json
 
@@ -12,8 +13,9 @@ F2K_JAR = Path(r"C:\Users\Admin\Documents\Study\_INT3229 Big Data\final project\
 KC_JAR = Path(r"C:\Users\Admin\Documents\Study\_INT3229 Big Data\final project\resources\jars\kafka-clients-3.4.0.jar")
 
 KAFKA_BOOTSTRAP_SERVER = "localhost:9092,localhost:9093,localhost:9094"
-KAFKA_TRACKING_TOPIC = "cam_streaming"
-KAFKA_EVENTS_TOPIC = "cam_tracking"
+KAFKA_RAW_TOPIC = "cam_raw"
+KAFKA_STREAMING_TOPIC = "cam_streaming"
+KAFKA_EVENTS_TOPIC = "cam_event"
 
 
 env: StreamExecutionEnvironment = None
@@ -44,7 +46,7 @@ def set_up():
     kafka_source = (
         KafkaSource.builder()
         .set_bootstrap_servers(KAFKA_BOOTSTRAP_SERVER)
-        .set_topics(KAFKA_TRACKING_TOPIC)
+        .set_topics(KAFKA_RAW_TOPIC)
         .set_group_id("plate")
         .set_starting_offsets(KafkaOffsetsInitializer.latest())
         .set_value_only_deserializer(SimpleStringSchema())
@@ -78,8 +80,8 @@ def process_stream():
     (
         stream
         .key_by(lambda x: json.loads(x).get("camera_id"), key_type=Types.STRING())
-        .map(FrameProcessor(), output_type=Types.STRING())
-        .filter(lambda x: x is not None)
+        .flat_map(DetectVehicle(), output_type=Types.STRING())
+        .flat_map(DetectPlate(), output_type=Types.STRING())
         .sink_to(kafka_sink)
     )
 
