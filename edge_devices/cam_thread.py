@@ -87,7 +87,7 @@ class CameraThread(QThread):
         """Gửi dữ liệu streaming tới STREAMING_TOPIC"""
         try:
             # Chuyển thành base64, giảm chất lượng ảnh
-            encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 50]
+            encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 70]
             _, buffer = cv2.imencode('.jpg', frame, encode_param)
             frame_base64 = base64.b64encode(buffer).decode('utf-8')
             

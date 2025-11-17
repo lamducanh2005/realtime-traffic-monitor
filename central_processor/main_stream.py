@@ -14,8 +14,9 @@ KC_JAR = Path(r"C:\Users\Admin\Documents\Study\_INT3229 Big Data\final project\r
 
 KAFKA_BOOTSTRAP_SERVER = "localhost:9092,localhost:9093,localhost:9094"
 KAFKA_RAW_TOPIC = "cam_raw"
-KAFKA_STREAMING_TOPIC = "cam_streaming"
+KAFKA_STREAMING_TOPIC = "cam_tracking"
 KAFKA_EVENTS_TOPIC = "cam_event"
+KAFKA_TEST_TOPIC = "cam_test_topic"
 
 
 env: StreamExecutionEnvironment = None
@@ -59,7 +60,7 @@ def set_up():
         .set_bootstrap_servers(KAFKA_BOOTSTRAP_SERVER)
         .set_record_serializer(
             KafkaRecordSerializationSchema.builder()
-            .set_topic(KAFKA_EVENTS_TOPIC)
+            .set_topic(KAFKA_TEST_TOPIC)
             .set_value_serialization_schema(SimpleStringSchema())
             .build()
         )
