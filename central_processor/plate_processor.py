@@ -45,38 +45,46 @@ def ocr_plate(plate_frame, ocr_model):
         str : Chuỗi biển số nhận diện được, nếu không thì trả về None
     """
 
-    # Lấy danh sách nhãn từ model
-    names = ocr_model.names
-    max_id = max(names.keys())
-    labels = [names.get(i, "") for i in range(max_id + 1)]
+    # Danh sách classes từ Lab01
+    classes = [
+        '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A',
+        'B', 'C', 'D', 'E', 'F', 'G', 'H', 'K', 'L', 'M',
+        'N', 'P', 'S', 'T', 'U', 'V', 'X', 'Y', 'Z', '0'
+    ]
 
     # Thực hiện OCR
-    results = ocr_model.predict(source=plate_frame, imgsz=480, conf=0.3, verbose=False)[0]
+    results = ocr_model.predict(source=plate_frame, imgsz=480, conf=0.3, verbose=False)
+    r = results[0]
 
-    # Nếu số lượng ký tự không phải từ 7-9 thì thôi
-    num_boxes = len(getattr(results.boxes, "xyxy", []))
-    if not (7 <= num_boxes <= 9):
+    # Nếu không có boxes
+    if len(getattr(r.boxes, "xyxy", [])) == 0:
         return None
     
     # Lấy thông tin các boxes
-    xyxys = results.boxes.xyxy.cpu().numpy()
-    clss = results.boxes.cls.cpu().numpy()
+    xyxys = r.boxes.xyxy.cpu().numpy()
+    clss = r.boxes.cls.cpu().numpy()
+    confs = r.boxes.conf.cpu().numpy()
 
     pred_boxes = []
-    for xyxy, c in zip(xyxys, clss):
+    for xyxy, c, cf in zip(xyxys, clss, confs):
         x1, y1, x2, y2 = map(int, xyxy)
         cls_id = int(c)
-        pred_boxes.append({"cls": cls_id, "xyxy": (x1, y1, x2, y2)})
+        conf = float(cf)
+        pred_boxes.append({"cls": cls_id, "conf": conf, "xyxy": (x1, y1, x2, y2)})
     
     # Sắp xếp theo hàng rồi theo tọa độ x (đọc từ trái sang phải, từ trên xuống)
     pred_boxes.sort(key=lambda b: (b['xyxy'][1] // 10, b['xyxy'][0]))
+
 
     # Ghép chuỗi biển số
     num_plate = ""
     for b in pred_boxes:
         cls_id = b['cls']
-        label = labels[cls_id] if 0 <= cls_id < len(labels) else str(cls_id)
-        num_plate += label
+        # Map qua bảng classes từ Lab01
+        if 0 <= cls_id < len(classes):
+            num_plate += classes[cls_id]
+        else:
+            num_plate += str(cls_id)
 
     return num_plate
 
@@ -136,11 +144,12 @@ class DetectVehicle(FlatMapFunction):
             return
 
         boxes = results[0].boxes.xywh.cpu().numpy()
-        track_ids = results[0].boxes.id.cpu().numpy().astype(str)
+        track_ids = results[0].boxes.id.cpu().numpy().astype(int)
+        classes = results[0].boxes.cls.cpu().numpy().astype(str)
 
         frame_h, frame_w = frame.shape[:2]
 
-        for box, track_id in zip(boxes, track_ids):
+        for box, track_id, obj_type in zip(boxes, track_ids, classes):
             x, y, box_w, box_h = map(int, box)
 
             x = (x - box_w) // 2
@@ -151,14 +160,14 @@ class DetectVehicle(FlatMapFunction):
             w = min(box_w, frame_w - x)
             h = min(box_h, frame_h - y)
 
-            
             obj_frame_b64 = Base64.encode_frame(frame[y:y+h, x:x+w])
-
 
             yield json.dumps({
                 "camera_id": cam_id,
                 "timestamp": timestamp,
-                "obj_id": track_id,
+                "obj_id": str(track_id),
+                "partition": str(track_id % 2),
+                "obj_type": obj_type,
                 "obj_frame": obj_frame_b64
             })
 
@@ -167,7 +176,7 @@ class DetectPlate(FlatMapFunction):
 
     def open(self, runtime_context):
         self.plate_model = YOLO('resources/models/license_plate_detector.pt')
-        self.ocr_model = YOLO('resources/models/Charcter-LP.pt')
+        self.ocr_model = YOLO('resources/models/ocr.pt')
 
     def flat_map(self, value):
         obj_data = json.loads(value)
@@ -187,7 +196,7 @@ class DetectPlate(FlatMapFunction):
         obj_data["plate_frame"] = Base64.encode_frame(plate_frame)
 
         yield json.dumps(obj_data)
-    
+
 class VoteBestPlate(KeyedProcessFunction):
 
     def open(self, config):

@@ -13,15 +13,16 @@ F2K_JAR = Path(r"C:\Users\Admin\Documents\Study\_INT3229 Big Data\final project\
 KC_JAR = Path(r"C:\Users\Admin\Documents\Study\_INT3229 Big Data\final project\resources\jars\kafka-clients-3.4.0.jar")
 
 KAFKA_BOOTSTRAP_SERVER = "localhost:9092,localhost:9093,localhost:9094"
-KAFKA_RAW_TOPIC = "cam_raw"
-KAFKA_STREAMING_TOPIC = "cam_tracking"
-KAFKA_EVENTS_TOPIC = "cam_event"
-KAFKA_TEST_TOPIC = "cam_test_topic"
+SOURCE_TOPIC = "cam_raw"
+EVENTS_TOPIC = "cam_event"
+STATS_TOPIC = "cam_statistic"
+TEST_TOPIC = "cam_test_topic"
 
 
 env: StreamExecutionEnvironment = None
-kafka_source: KafkaSource = None
-kafka_sink: KafkaSink = None
+source: KafkaSource = None
+events_sink: KafkaSink = None
+stats_sink: KafkaSink = None
 
 
 def set_up():
@@ -32,7 +33,7 @@ def set_up():
         - Cài các tham số
         - Tạo kafka source và kafka sink
     """
-    global env, kafka_source, kafka_sink
+    global env, source, events_sink, stats_sink
 
     env = StreamExecutionEnvironment.get_execution_environment()
     
@@ -43,11 +44,16 @@ def set_up():
     env.set_runtime_mode(RuntimeExecutionMode.STREAMING)
     env.set_parallelism(1)
 
+    # config = env.get_config()
+    # print(f"Parallelism: {env.get_parallelism()}")
+    # print(f"Max Parallelism: {env.get_max_parallelism()}")
+    # print(f"Runtime Mode: {env.get_runtime_mode()}")
+
     # Tạo kafka source
-    kafka_source = (
+    source = (
         KafkaSource.builder()
         .set_bootstrap_servers(KAFKA_BOOTSTRAP_SERVER)
-        .set_topics(KAFKA_RAW_TOPIC)
+        .set_topics(SOURCE_TOPIC)
         .set_group_id("plate")
         .set_starting_offsets(KafkaOffsetsInitializer.latest())
         .set_value_only_deserializer(SimpleStringSchema())
@@ -55,12 +61,24 @@ def set_up():
     )
 
     # Tạo kafka sink
-    kafka_sink = (
+    events_sink = (
         KafkaSink.builder()
         .set_bootstrap_servers(KAFKA_BOOTSTRAP_SERVER)
         .set_record_serializer(
             KafkaRecordSerializationSchema.builder()
-            .set_topic(KAFKA_TEST_TOPIC)
+            .set_topic(EVENTS_TOPIC)
+            .set_value_serialization_schema(SimpleStringSchema())
+            .build()
+        )
+        .build()
+    )
+
+    stats_sink = (
+        KafkaSink.builder()
+        .set_bootstrap_servers(KAFKA_BOOTSTRAP_SERVER)
+        .set_record_serializer(
+            KafkaRecordSerializationSchema.builder()
+            .set_topic("cam_test_topic_2")
             .set_value_serialization_schema(SimpleStringSchema())
             .build()
         )
@@ -69,22 +87,40 @@ def set_up():
 
 
 def process_stream():
-    global env, kafka_source, kafka_sink
+    global env, source, events_sink, stats_sink
 
     stream = env.from_source(
-        kafka_source,
+        source,
         WatermarkStrategy.no_watermarks(),
         "frame_processor",
         Types.STRING()
     )
 
-    (
+    vehicle_detect = (
         stream
         .key_by(lambda x: json.loads(x).get("camera_id"), key_type=Types.STRING())
         .flat_map(DetectVehicle(), output_type=Types.STRING())
+        .key_by(lambda x: json.loads(x).get("partition"), key_type=Types.STRING())
         .flat_map(DetectPlate(), output_type=Types.STRING())
-        .sink_to(kafka_sink)
     )
+
+    # even_branch = (
+    #     vehicle_detect
+    #     .filter(lambda x: str(json.loads(x).get("partition")) == "0")
+    #     .flat_map(DetectPlate(), output_type=Types.STRING())
+    # )
+
+    # odd_branch = (
+    #     vehicle_detect
+    #     .filter(lambda x: str(json.loads(x).get("partition")) == "1")
+    #     .flat_map(DetectPlate(), output_type=Types.STRING())
+    # )
+
+    # even_branch.sink_to(events_sink)
+    # odd_branch.sink_to(stats_sink)
+
+    vehicle_detect.sink_to(events_sink)
+
 
 
 def execute_job():
