@@ -23,6 +23,7 @@ env: StreamExecutionEnvironment = None
 source: KafkaSource = None
 events_sink: KafkaSink = None
 stats_sink: KafkaSink = None
+tracking_sink: KafkaSink = None
 
 
 def set_up():
@@ -33,7 +34,7 @@ def set_up():
         - Cài các tham số
         - Tạo kafka source và kafka sink
     """
-    global env, source, events_sink, stats_sink
+    global env, source, events_sink, stats_sink, tracking_sink
 
     env = StreamExecutionEnvironment.get_execution_environment()
     
@@ -85,9 +86,21 @@ def set_up():
         .build()
     )
 
+    tracking_sink = (
+        KafkaSink.builder()
+        .set_bootstrap_servers(KAFKA_BOOTSTRAP_SERVER)
+        .set_record_serializer(
+            KafkaRecordSerializationSchema.builder()
+            .set_topic("cam_tracking")
+            .set_value_serialization_schema(SimpleStringSchema())
+            .build()
+        )
+        .build()
+    )
+
 
 def process_stream():
-    global env, source, events_sink, stats_sink
+    global env, source, events_sink, stats_sink, tracking_sink
 
     stream = env.from_source(
         source,
@@ -96,31 +109,26 @@ def process_stream():
         Types.STRING()
     )
 
-    vehicle_detect = (
+    # Sử dụng DetectVehicleWithAnnotation để có cả objects và annotated frame
+    combined_stream = (
         stream
         .key_by(lambda x: json.loads(x).get("camera_id"), key_type=Types.STRING())
         .flat_map(DetectVehicle(), output_type=Types.STRING())
-        .key_by(lambda x: json.loads(x).get("partition"), key_type=Types.STRING())
+    )
+
+    annotated_frames_stream = combined_stream.filter(
+        lambda x: json.loads(x).get("type") == "annotated_frame"
+    )
+
+    # Xử lý objects_stream (ví dụ: detect plate)
+    plate_detection = (
+        combined_stream
+        .filter(lambda x: json.loads(x).get("type") == "object")
         .flat_map(DetectPlate(), output_type=Types.STRING())
     )
 
-    # even_branch = (
-    #     vehicle_detect
-    #     .filter(lambda x: str(json.loads(x).get("partition")) == "0")
-    #     .flat_map(DetectPlate(), output_type=Types.STRING())
-    # )
-
-    # odd_branch = (
-    #     vehicle_detect
-    #     .filter(lambda x: str(json.loads(x).get("partition")) == "1")
-    #     .flat_map(DetectPlate(), output_type=Types.STRING())
-    # )
-
-    # even_branch.sink_to(events_sink)
-    # odd_branch.sink_to(stats_sink)
-
-    vehicle_detect.sink_to(events_sink)
-
+    plate_detection.sink_to(events_sink)
+    annotated_frames_stream.sink_to(tracking_sink)
 
 
 def execute_job():

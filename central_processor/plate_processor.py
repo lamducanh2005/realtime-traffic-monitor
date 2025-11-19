@@ -110,11 +110,18 @@ class ExpandObject(FlatMapFunction):
                 "obj_frame": obj_frame
             })
 
+
 class DetectVehicle(FlatMapFunction):
+    """
+    Thực hiện tracking và tạo 2 loại output:
+    1. Objects: Từng object riêng lẻ (type="object")
+    2. Annotated frame: Frame đã vẽ bounding box (type="annotated_frame")
+    """
     
     def __init__(self):
         self.model = None
         self.device = None
+        self.colors = {}
 
     def open(self, runtime_context):
         self.model = YOLO("resources/models/yolo11n.onnx")
@@ -130,7 +137,7 @@ class DetectVehicle(FlatMapFunction):
             results = self.model.track(
                 frame,
                 persist=True,
-                classes=[2, 3, 5, 7],
+                classes=[2],
                 imgsz=480,
                 conf=0.4,
                 iou=0.5,
@@ -144,12 +151,15 @@ class DetectVehicle(FlatMapFunction):
             return
 
         boxes = results[0].boxes.xywh.cpu().numpy()
+        boxes_xyxy = results[0].boxes.xyxy.cpu().numpy()
         track_ids = results[0].boxes.id.cpu().numpy().astype(int)
         classes = results[0].boxes.cls.cpu().numpy().astype(str)
 
         frame_h, frame_w = frame.shape[:2]
+        annotated_frame = frame.copy()
 
-        for box, track_id, obj_type in zip(boxes, track_ids, classes):
+        # Yield từng object
+        for box, box_xyxy, track_id, obj_type in zip(boxes, boxes_xyxy, track_ids, classes):
             x, y, box_w, box_h = map(int, box)
 
             x = (x - box_w) // 2
@@ -162,7 +172,9 @@ class DetectVehicle(FlatMapFunction):
 
             obj_frame_b64 = Base64.encode_frame(frame[y:y+h, x:x+w])
 
+            # Output 1: Object
             yield json.dumps({
+                "type": "object",
                 "camera_id": cam_id,
                 "timestamp": timestamp,
                 "obj_id": str(track_id),
@@ -170,6 +182,26 @@ class DetectVehicle(FlatMapFunction):
                 "obj_type": obj_type,
                 "obj_frame": obj_frame_b64
             })
+
+            # Vẽ bounding box lên annotated frame
+            x1, y1, x2, y2 = map(int, box_xyxy)
+            
+            if track_id not in self.colors:
+                self.colors[track_id] = tuple(int(c) for c in np.random.randint(0, 255, 3))
+            color = self.colors[track_id]
+            
+            cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), color, 2)
+            cv2.putText(annotated_frame, str(track_id), (x1, y1-5),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+
+        # Output 2: Annotated frame
+        annotated_frame_b64 = Base64.encode_frame(annotated_frame)
+        yield json.dumps({
+            "type": "annotated_frame",
+            "camera_id": cam_id,
+            "timestamp": timestamp,
+            "frame": annotated_frame_b64
+        })
 
     
 class DetectPlate(FlatMapFunction):

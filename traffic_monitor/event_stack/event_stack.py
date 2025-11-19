@@ -79,7 +79,8 @@ class EventStack(QWidget):
                 auto_offset_reset='latest',
                 enable_auto_commit=True,
                 fetch_min_bytes=1,
-                fetch_max_wait_ms=100
+                fetch_max_wait_ms=10,
+                max_poll_records=100
             )
 
             for msg in self.consumer:
@@ -92,11 +93,12 @@ class EventStack(QWidget):
 
                 if data.get('camera_id') != self.camera_id:
                     continue
-
+                
+                print("New message!")
                 # Extract data from new message structure
                 num_plate = data.get('num_plate') or '--'
                 timestamp = data.get('timestamp') or ''
-                frame_b64 = data.get('obj_frame')
+                frame_b64 = data.get('plate_frame')
                 plate_frame = None
 
                 if frame_b64:

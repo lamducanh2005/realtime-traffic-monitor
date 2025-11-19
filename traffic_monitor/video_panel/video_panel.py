@@ -12,7 +12,7 @@ from multiprocessing import Process, Queue
 import os
 import signal
 
-CAMERA_STREAM_TOPIC = "cam_raw"
+CAMERA_STREAM_TOPIC = "cam_tracking"
 BOOTSTRAP_SERVER = [f"localhost:{i}" for i in range(9092, 9092 + 3)]
 
 
@@ -28,8 +28,8 @@ def kafka_consumer_worker(camera_id: str, frame_queue: Queue, topic: str, bootst
             auto_offset_reset='latest',
             enable_auto_commit=True,
             fetch_min_bytes=1,
-            fetch_max_wait_ms=1000,
-            max_poll_records=5000
+            fetch_max_wait_ms=100,
+            max_poll_records=500
         )
 
         for msg in consumer:
