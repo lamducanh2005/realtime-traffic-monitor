@@ -6,6 +6,7 @@ import numpy as np
 import base64
 from .utils import Base64
 import torch
+import time
 
 # plate_model = YOLO('resources/models/license_plate_detector.pt')
 
@@ -122,7 +123,13 @@ class DetectVehicle(FlatMapFunction):
         self.model = None
         self.device = None
         self.colors = {}
-
+        self.class_names = {
+            2: 'car',
+            3: 'motorcycle',
+            5: 'bus',
+            7: 'truck'
+        }
+    
     def open(self, runtime_context):
         self.model = YOLO("resources/models/yolo11n.onnx")
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -137,7 +144,7 @@ class DetectVehicle(FlatMapFunction):
             results = self.model.track(
                 frame,
                 persist=True,
-                classes=[2],
+                classes=[2, 3, 5, 7],
                 imgsz=480,
                 conf=0.4,
                 iou=0.5,
@@ -148,12 +155,18 @@ class DetectVehicle(FlatMapFunction):
             )
         
         if results[0].boxes.id is None:
+            yield json.dumps({
+                "type": "annotated_frame",
+                "camera_id": cam_id,
+                "timestamp": timestamp,
+                "frame": data['frame']
+            })
             return
 
         boxes = results[0].boxes.xywh.cpu().numpy()
         boxes_xyxy = results[0].boxes.xyxy.cpu().numpy()
         track_ids = results[0].boxes.id.cpu().numpy().astype(int)
-        classes = results[0].boxes.cls.cpu().numpy().astype(str)
+        classes = results[0].boxes.cls.cpu().numpy().astype(int)
 
         frame_h, frame_w = frame.shape[:2]
         annotated_frame = frame.copy()
@@ -179,19 +192,23 @@ class DetectVehicle(FlatMapFunction):
                 "timestamp": timestamp,
                 "obj_id": str(track_id),
                 "partition": str(track_id % 2),
-                "obj_type": obj_type,
+                "obj_type": str(obj_type),
                 "obj_frame": obj_frame_b64
             })
 
             # Vẽ bounding box lên annotated frame
             x1, y1, x2, y2 = map(int, box_xyxy)
             
-            if track_id not in self.colors:
-                self.colors[track_id] = tuple(int(c) for c in np.random.randint(0, 255, 3))
-            color = self.colors[track_id]
+            # Lấy màu theo class thay vì track_id
+            if obj_type not in self.colors:
+                self.colors[obj_type] = tuple(int(c) for c in np.random.randint(0, 255, 3))
+            color = self.colors[obj_type]
+            
+            # Lấy tên class
+            class_name = self.class_names.get(obj_type, f"class_{obj_type}")
             
             cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), color, 2)
-            cv2.putText(annotated_frame, str(track_id), (x1, y1-5),
+            cv2.putText(annotated_frame, class_name, (x1, y1-5),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 
         # Output 2: Annotated frame

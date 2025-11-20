@@ -126,7 +126,7 @@ class VideoPanel(QWidget):
         """Timer: Lấy frame từ Queue và hiển thị đều đặn (30fps)"""
         self.display_timer = QTimer()
         self.display_timer.timeout.connect(self._pull_and_display_frame)
-        self.display_timer.start(33)  # ~30fps
+        self.display_timer.start(55)  # ~30fps
 
     def _pull_and_display_frame(self):
         """Pull frame từ Queue sang buffer"""

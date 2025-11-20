@@ -44,7 +44,7 @@ class CameraThread(QThread):
             return
         
         fps = self.cap.get(cv2.CAP_PROP_FPS)
-        frame_delay = 1 / fps if fps > 0 else 1/30
+        frame_delay = 1.0 / fps
         
         self.running = True
         last_time = time.time()
@@ -68,7 +68,7 @@ class CameraThread(QThread):
             cv2.putText(annotated_frame, f"Cam {self.camera_id} - {timestamp}", 
                        (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
-            # Hiển thị lên màn hình
+            # Hiển thị lên màn hình (LUÔN hiển thị để UI mượt)
             self.frame_ready.emit(annotated_frame.copy())
 
             # Gửi frame tới Kafka
@@ -87,7 +87,7 @@ class CameraThread(QThread):
         """Gửi dữ liệu streaming tới STREAMING_TOPIC"""
         try:
             # Chuyển thành base64, giảm chất lượng ảnh
-            encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 70]
+            encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 60]
             _, buffer = cv2.imencode('.jpg', frame, encode_param)
             frame_base64 = base64.b64encode(buffer).decode('utf-8')
             
