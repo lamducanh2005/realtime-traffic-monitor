@@ -22,6 +22,10 @@ class EventStack(QWidget):
         self.event_thread = None
         self.event_running = False
         self.consumer = None
+        
+        # THÊM: Queue để lưu events chưa hiển thị
+        self.pending_events = []  # List of (timestamp, payload)
+        self.current_video_timestamp = None  # Timestamp hiện tại của video
 
         self.main_layout = QVBoxLayout()
         self.main_layout.setContentsMargins(0, 0, 0, 0)
@@ -57,11 +61,54 @@ class EventStack(QWidget):
         self.container_layout.insertWidget(0, event_item)
 
     def _on_event_received(self, payload: dict):
+        """Handler khi nhận event từ Kafka"""
         try:
+            timestamp = payload.get('timestamp') or ''
+            
+            # THÊM: Thêm vào pending queue
+            self.pending_events.append((timestamp, payload))
+            
+            # Sort theo timestamp (đảm bảo thứ tự)
+            self.pending_events.sort(key=lambda x: x[0])
+            
+            # Kiểm tra và hiển thị events đã đến lúc
+            self._check_and_display_pending_events()
+        except Exception:
+            pass
+    
+    def on_video_frame_displayed(self, timestamp: str):
+        """
+        Callback khi video hiển thị frame mới
+        Được gọi từ VideoPanel.frame_displayed signal
+        """
+        self.current_video_timestamp = timestamp
+        self._check_and_display_pending_events()
+    
+    def _check_and_display_pending_events(self):
+        """Kiểm tra và hiển thị events đã đến timestamp"""
+        if not self.current_video_timestamp:
+            return  # Chưa có frame nào hiển thị
+        
+        # Hiển thị tất cả events có timestamp <= current_video_timestamp
+        events_to_display = []
+        remaining_events = []
+        
+        for timestamp, payload in self.pending_events:
+            if timestamp <= self.current_video_timestamp:
+                events_to_display.append(payload)
+            else:
+                remaining_events.append((timestamp, payload))
+        
+        # Update pending list
+        self.pending_events = remaining_events
+        
+        # Hiển thị events
+        for payload in events_to_display:
             num_plate = payload.get('num_plate') or '--'
             timestamp = payload.get('timestamp') or ''
             plate_frame = payload.get('plate_frame', None)
             obj_frame = payload.get('obj_frame', None)
+            
             item = EventItem(
                 num_plate=num_plate, 
                 timestamp=timestamp, 
@@ -69,8 +116,6 @@ class EventStack(QWidget):
                 obj_frame=obj_frame
             )
             self.add_event(item)
-        except Exception:
-            pass
 
     def start_kafka_consumer(self):
         self.event_running = True

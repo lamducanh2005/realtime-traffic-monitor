@@ -7,11 +7,7 @@ import base64
 from .utils import Base64
 import torch
 import time
-
-# plate_model = YOLO('resources/models/license_plate_detector.pt')
-
-# ocr_model = YOLO('resources/models/Charcter-LP.pt')
-
+from pyflink.common import Types
 
 def detect_and_crop_plate(vehicle_frame, plate_model):
     """
@@ -106,28 +102,6 @@ def ocr_plate(plate_frame, ocr_model):
             num_plate += str(cls_id)
 
     return num_plate
-
-
-class ExpandObject(FlatMapFunction):
-
-    def flat_map(self, value):
-        frame_data = json.loads(value)
-
-        cam_id = frame_data["camera_id"]
-        timestamp = frame_data["timestamp"]
-        frame = Base64.decode_frame(frame_data["frame"])
-        print("Num objects: ", len(frame_data["objects"]))
-
-        for obj in frame_data["objects"]:
-            x, y, w, h = obj["box"]
-            obj_frame = Base64.encode_frame(frame[y:y+h, x:x+w])
-
-            yield json.dumps({
-                "camera_id": cam_id,
-                "timestamp": timestamp,
-                "obj_id": str(obj["id"]),
-                "obj_frame": obj_frame
-            })
 
 
 class DetectVehicle(FlatMapFunction):
@@ -262,25 +236,26 @@ class DetectPlate(FlatMapFunction):
         if not self.check_valid_plate(num_plate):
             return
         
-        obj_data["num_plate"] = num_plate
+        obj_data["num_plate"] = self.format_plate(num_plate)
         obj_data["plate_frame"] = Base64.encode_frame(plate_frame)
 
         yield json.dumps(obj_data)
     
     def check_valid_plate(self, plate: str):
+        return True
+    
+    def format_plate(self, plate: str):
+        return plate
+
+class CarDetectPlate(DetectPlate):
+    def check_valid_plate(self, plate: str):
         """
-        Kiểm tra biển số hợp lệ theo format Việt Nam:
-        - Độ dài: 7-9 ký tự
-        - 2 ký tự đầu: SỐ
-        - Ký tự thứ 3: CHỮ
-        - 4 ký tự cuối: SỐ
-        
-        Format:
-        - 7 ký tự: 29A1234
-        - 8 ký tự: 29A12345
-        - 9 ký tự: 29AB1234 hoặc 29A123456 (tùy vùng)
+        Format xe ô tô: 29A1234 hoặc 29A12345 (7-8 ký tự)
+        - 2 số đầu: vùng (29, 30, 51...)
+        - Ký tự 3: chữ cái (A-Z)
+        - Ký tự 4 trở đi: tất cả là số
         """
-        if not plate or not (7 <= len(plate) <= 9):
+        if not plate or not (7 <= len(plate) <= 8):
             return False
         
         # Kiểm tra 2 ký tự đầu là số
@@ -291,15 +266,183 @@ class DetectPlate(FlatMapFunction):
         if not plate[2].isalpha():
             return False
         
-        # Kiểm tra 4 ký tự cuối là số
-        last_4 = plate[-4:]
-        if not all(c.isdigit() for c in last_4):
+        # Kiểm tra các ký tự từ vị trí 3 trở đi (index 3+) đều là số
+        remaining = plate[3:]
+        if not all(c.isdigit() for c in remaining):
             return False
         
         return True
-
-class VoteBestPlate(KeyedProcessFunction):
-
-    def open(self, config):
-        self.plate_history = self.get_runtime_context().get_state("plates")
     
+    def format_plate(self, plate):
+        """
+        Format: 29A1234 -> 29A-1234
+        Chèn dấu gạch ngang sau ký tự thứ 3
+        """
+        if len(plate) >= 3:
+            return plate[:3] + '-' + plate[3:]
+        return plate
+
+class MotorDetectPlate(DetectPlate):
+    def check_valid_plate(self, plate: str):
+        """
+        Format xe máy: 29AB1234 hoặc 29A11234 (8-9 ký tự)
+        - 2 số đầu: vùng (29, 30, 51...)
+        - Ký tự 3: chữ cái (A-Z)
+        - Ký tự 4: chữ hoặc số (không kiểm tra)
+        - Ký tự 5 trở đi: tất cả là số
+        """
+        if not plate or not (8 <= len(plate) <= 9):
+            return False
+        
+        # Kiểm tra 2 ký tự đầu là số
+        if not (plate[0].isdigit() and plate[1].isdigit()):
+            return False
+        
+        # Kiểm tra ký tự thứ 3 là chữ
+        if not plate[2].isalpha():
+            return False
+        
+        
+        # Kiểm tra các ký tự từ vị trí 5 trở đi (index 4+) đều là số
+        remaining = plate[4:]
+        if not all(c.isdigit() for c in remaining):
+            return False
+        
+        
+        return True
+    
+    def format_plate(self, plate):
+        """
+        Format: 29AB1234 -> 29AB-1234
+        Chèn dấu gạch ngang sau ký tự thứ 4
+        """
+        if len(plate) >= 4:
+            return plate[:4] + '-' + plate[4:]
+        return plate
+     
+
+
+class ReducePlate(KeyedProcessFunction):
+    """
+    Vote biển số tốt nhất cho mỗi track_id
+    - Key: "camera_id_obj_id" (string)
+    - Vote: Biển số xuất hiện nhiều nhất
+    - Frame: Lấy frame đầu tiên của biển số đó
+    """
+    
+    def open(self, runtime_context):
+        from pyflink.datastream.state import ValueStateDescriptor
+        
+        # State: {num_plate: [(timestamp, obj_frame_b64, plate_frame_b64, obj_type), ...]}
+        self.plate_candidates = runtime_context.get_state(
+            ValueStateDescriptor("plate_candidates", Types.PICKLED_BYTE_ARRAY())
+        )
+        
+        # State: Đã emit kết quả chưa
+        self.emitted = runtime_context.get_state(
+            ValueStateDescriptor("emitted", Types.BOOLEAN())
+        )
+        
+        # State: Thời gian nhận message cuối
+        self.last_update = runtime_context.get_state(
+            ValueStateDescriptor("last_update", Types.PICKLED_BYTE_ARRAY())
+        )
+        
+        # Timeout: Nếu không nhận message mới sau 2 giây → emit kết quả
+        self.timeout_seconds = 5
+    
+    def process_element(self, value, ctx):
+        from datetime import datetime
+        
+        data = json.loads(value)
+        
+        cam_id = data["camera_id"]
+        track_id = data["obj_id"]
+        num_plate = data["num_plate"]
+        timestamp_str = data["timestamp"]
+        obj_frame_b64 = data["obj_frame"]
+        plate_frame_b64 = data["plate_frame"]
+        obj_type = data["obj_type"]
+        
+        # Parse timestamp
+        current_time = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
+        current_ts = current_time.timestamp()
+        
+        # Lấy state
+        candidates = self.plate_candidates.value()
+        if candidates is None:
+            candidates = {}
+        
+        emitted = self.emitted.value() or False
+        
+        # Nếu đã emit rồi thì bỏ qua
+        if emitted:
+            return
+        
+        # Thêm candidate
+        if num_plate not in candidates:
+            candidates[num_plate] = []
+        
+        candidates[num_plate].append({
+            "timestamp": timestamp_str,
+            "timestamp_num": current_ts,
+            "obj_frame": obj_frame_b64,
+            "plate_frame": plate_frame_b64,
+            "obj_type": obj_type  # Lưu obj_type
+        })
+        
+        # Update state
+        self.plate_candidates.update(candidates)
+        self.last_update.update(current_ts)
+        
+        # Đăng ký timer để check timeout
+        timer_ts = int((current_ts + self.timeout_seconds) * 1000)  # milliseconds
+        ctx.timer_service().register_processing_time_timer(timer_ts)
+    
+    def on_timer(self, timestamp, ctx):
+        """Callback khi timer trigger (sau 2 giây không nhận message mới)"""
+        from datetime import datetime
+        
+        candidates = self.plate_candidates.value()
+        emitted = self.emitted.value() or False
+        last_update = self.last_update.value()
+        
+        if emitted or candidates is None or len(candidates) == 0:
+            return
+        
+        current_ts = datetime.now().timestamp()
+        
+        # Kiểm tra xem đã timeout chưa
+        if current_ts - last_update < self.timeout_seconds:
+            return  # Chưa timeout, chờ thêm
+        
+        # Vote: Tìm biển số xuất hiện nhiều nhất
+        vote_counts = {plate: len(records) for plate, records in candidates.items()}
+        best_plate = max(vote_counts, key=vote_counts.get)
+        
+        # Lấy record đầu tiên của biển số đó (sắp xếp theo timestamp)
+        records = candidates[best_plate]
+        records.sort(key=lambda r: r["timestamp_num"])
+        first_record = records[0]
+        
+        # Parse key "camera_id_obj_id"
+        key = ctx.get_current_key()
+        cam_id, obj_id = key.split("_", 1)
+        
+        # Emit kết quả
+        result = {
+            "camera_id": cam_id,
+            "obj_id": obj_id,
+            "num_plate": best_plate,
+            "timestamp": first_record["timestamp"],
+            "obj_frame": first_record["obj_frame"],
+            "plate_frame": first_record["plate_frame"],
+            "obj_type": first_record["obj_type"],
+            "vote_count": vote_counts[best_plate],
+            "total_detections": sum(vote_counts.values())
+        }
+        
+        yield json.dumps(result)
+        
+        # Đánh dấu đã emit
+        self.emitted.update(True)

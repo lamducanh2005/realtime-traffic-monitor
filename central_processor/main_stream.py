@@ -4,7 +4,8 @@ from pyflink.common.serialization import SimpleStringSchema
 from pyflink.common import WatermarkStrategy, Types
 from pathlib import Path
 from .detect_processor import FrameProcessor
-from .plate_processor import DetectVehicle, DetectPlate
+from .plate_processor import DetectVehicle, CarDetectPlate, MotorDetectPlate, ReducePlate
+from .stats_processor import CountVehicleSimple
 import os
 import json
 
@@ -109,7 +110,7 @@ def process_stream():
         Types.STRING()
     )
 
-    # Sử dụng DetectVehicleWithAnnotation để có cả objects và annotated frame
+    # Sử dụng DetectVehicle để có cả objects và annotated frame
     combined_stream = (
         stream
         .key_by(lambda x: json.loads(x).get("camera_id"), key_type=Types.STRING())
@@ -120,15 +121,42 @@ def process_stream():
         lambda x: json.loads(x).get("type") == "annotated_frame"
     )
 
-    # Xử lý objects_stream (ví dụ: detect plate)
-    plate_detection = (
-        combined_stream
-        .filter(lambda x: json.loads(x).get("type") == "object")
-        .flat_map(DetectPlate(), output_type=Types.STRING())
+    # Tách stream theo loại xe
+    objects_stream = combined_stream.filter(lambda x: json.loads(x).get("type") == "object")
+    
+    # Stream cho xe ô tô (car, bus, truck)
+    car_plate_stream = (
+        objects_stream
+        .filter(lambda x: json.loads(x).get("obj_type") in ["2", "5", "7"])  # car, bus, truck
+        .flat_map(CarDetectPlate(), output_type=Types.STRING())
+    )
+    
+    # Stream cho xe máy
+    motor_plate_stream = (
+        objects_stream
+        .filter(lambda x: json.loads(x).get("obj_type") == "3")  # motorcycle
+        .flat_map(MotorDetectPlate(), output_type=Types.STRING()) 
     )
 
-    plate_detection.sink_to(events_sink)
+    vehicle_plate_stream = (
+        car_plate_stream.union(motor_plate_stream)
+        .key_by(
+            lambda x: f"{json.loads(x)['camera_id']}_{json.loads(x)['obj_id']}", 
+            key_type=Types.STRING()
+        )
+        .process(ReducePlate(), output_type=Types.STRING())
+    )
+
+    counting_stream = (
+        objects_stream
+        .key_by(lambda x: json.loads(x).get("camera_id"), key_type=Types.STRING())
+        .process(CountVehicleSimple(), output_type=Types.STRING())
+    )
+
+    # Gửi cả 2 stream vào events_sink
+    vehicle_plate_stream.sink_to(events_sink)
     annotated_frames_stream.sink_to(tracking_sink)
+    counting_stream.sink_to(stats_sink)
 
 
 def execute_job():

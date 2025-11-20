@@ -32,6 +32,9 @@ class MonitorTab(QWidget):
         self.event_stack = EventStack(self.camera_id)
         self.event_stack.setMinimumWidth(240)
         content.addWidget(self.event_stack, stretch=1)
+        
+        # THÊM: Kết nối signal từ VideoPanel đến EventStack
+        self.video_panel.frame_displayed.connect(self.event_stack.on_video_frame_displayed)
 
         self.main_layout.addLayout(content, stretch=8)
 

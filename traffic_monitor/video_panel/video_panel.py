@@ -43,6 +43,8 @@ def kafka_consumer_worker(camera_id: str, frame_queue: Queue, topic: str, bootst
                 continue
 
             frame_b64 = data.get('raw_frame') or data.get('frame')
+            timestamp = data.get('timestamp', '')  # THÊM: Lấy timestamp
+            
             if not frame_b64:
                 continue
 
@@ -54,9 +56,9 @@ def kafka_consumer_worker(camera_id: str, frame_queue: Queue, topic: str, bootst
                 frame = None
 
             if frame is not None:
-                # Đẩy vào Queue (thread-safe)
+                # Đẩy vào Queue (thread-safe) kèm timestamp
                 try:
-                    frame_queue.put(frame, block=False)
+                    frame_queue.put((frame, timestamp), block=False)  # THÊM: Tuple (frame, timestamp)
                 except:
                     pass  # Queue full, bỏ qua frame
 
@@ -68,6 +70,7 @@ def kafka_consumer_worker(camera_id: str, frame_queue: Queue, topic: str, bootst
 
 class VideoPanel(QWidget):
     frame_updated = pyqtSignal(object)
+    frame_displayed = pyqtSignal(str)  # THÊM: Signal emit timestamp khi frame được hiển thị
 
     def __init__(self, camera_id: str, topic: str = CAMERA_STREAM_TOPIC):
         super().__init__()
@@ -133,8 +136,16 @@ class VideoPanel(QWidget):
         # Lấy hết frame từ Queue vào buffer
         while not self.frame_queue.empty():
             try:
-                frame = self.frame_queue.get(block=False)
-                self.frame_buffer.append(frame)
+                frame_data = self.frame_queue.get(block=False)  # THÊM: Lấy tuple (frame, timestamp)
+                
+                # Unpack frame và timestamp
+                if isinstance(frame_data, tuple):
+                    frame, timestamp = frame_data
+                else:
+                    frame = frame_data
+                    timestamp = None
+                
+                self.frame_buffer.append((frame, timestamp))  # THÊM: Lưu cả timestamp
                 
                 if not self.buffer_ready and len(self.frame_buffer) >= self.target_buffer_size:
                     self.buffer_ready = True
@@ -149,17 +160,28 @@ class VideoPanel(QWidget):
                 progress = len(self.frame_buffer) / self.target_buffer_size * 100
                 cv2.putText(placeholder, f"Cam {self.camera_id} Buffering... {progress:.0f}%", 
                            (20, 240), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-                self.update_frame(placeholder)
+                self.update_frame(placeholder, None)
             return
 
         if len(self.frame_buffer) > 0:
-            frame = self.frame_buffer.popleft()
+            frame_data = self.frame_buffer.popleft()  # THÊM: Lấy tuple
+            
+            if isinstance(frame_data, tuple):
+                frame, timestamp = frame_data
+            else:
+                frame = frame_data
+                timestamp = None
+            
             self.frame_updated.emit(frame)
+            
+            # THÊM: Emit signal với timestamp
+            if timestamp:
+                self.frame_displayed.emit(timestamp)
         else:
             self.buffer_ready = False
             print(f"[{self.camera_id}] Buffer underrun! Re-buffering...")
 
-    def update_frame(self, frame):
+    def update_frame(self, frame, timestamp=None):
         if frame is None:
             return
         try:
