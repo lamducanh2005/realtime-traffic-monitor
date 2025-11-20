@@ -23,14 +23,17 @@ def detect_and_crop_plate(vehicle_frame, plate_model):
     """
     
     # Nhận diện vị trí biển số
-    plate_detection = plate_model(vehicle_frame)[0].boxes.data.tolist()
-    if len(plate_detection) < 1:
+    plate_detection = plate_model.predict(source=vehicle_frame, imgsz=480, conf=0.5, verbose=False, device='cuda:0')
+    
+    # Check if any plates detected
+    if len(plate_detection) < 1 or len(plate_detection[0].boxes.data.tolist()) < 1:
         return None
-    else:
-        plate_detection = plate_detection[0]
+    
+    # Get first detection box
+    plate_box = plate_detection[0].boxes.data.tolist()[0]
     
     # Khoanh vùng và cắt biển số
-    x1, y1, x2, y2, score, class_id = plate_detection
+    x1, y1, x2, y2, score, class_id = plate_box
     x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
     cropped_frame = vehicle_frame[y1:y2, x1:x2]
 
@@ -58,7 +61,7 @@ def ocr_plate(plate_frame, ocr_model):
     r = results[0]
 
     # Nếu không có boxes
-    if len(getattr(r.boxes, "xyxy", [])) == 0:
+    if not (7 <= len(getattr(r.boxes, "xyxy", [])) <= 9):
         return None
     
     # Lấy thông tin các boxes
@@ -73,8 +76,23 @@ def ocr_plate(plate_frame, ocr_model):
         conf = float(cf)
         pred_boxes.append({"cls": cls_id, "conf": conf, "xyxy": (x1, y1, x2, y2)})
     
-    # Sắp xếp theo hàng rồi theo tọa độ x (đọc từ trái sang phải, từ trên xuống)
-    pred_boxes.sort(key=lambda b: (b['xyxy'][1] // 10, b['xyxy'][0]))
+    # Sắp xếp thông minh cho biển số nghiêng
+    # Tính trung bình y để phát hiện số dòng
+    if len(pred_boxes) > 0:
+        y_centers = [(b['xyxy'][1] + b['xyxy'][3]) / 2 for b in pred_boxes]
+        y_min, y_max = min(y_centers), max(y_centers)
+        y_range = y_max - y_min
+        
+        # Nếu range nhỏ (< 30% chiều cao trung bình) → 1 dòng
+        avg_height = sum([b['xyxy'][3] - b['xyxy'][1] for b in pred_boxes]) / len(pred_boxes)
+        
+        if y_range < avg_height * 0.5:  # Biển số 1 dòng
+            # Chỉ sắp xếp theo x (trái → phải)
+            pred_boxes.sort(key=lambda b: b['xyxy'][0])
+        else:  # Biển số 2 dòng
+            # Sắp xếp theo hàng (dựa vào y center) rồi theo x
+            pred_boxes.sort(key=lambda b: ((b['xyxy'][1] + b['xyxy'][3]) / 2 // (avg_height * 0.7), b['xyxy'][0]))
+    
 
 
     # Ghép chuỗi biển số
@@ -173,17 +191,17 @@ class DetectVehicle(FlatMapFunction):
 
         # Yield từng object
         for box, box_xyxy, track_id, obj_type in zip(boxes, boxes_xyxy, track_ids, classes):
-            x, y, box_w, box_h = map(int, box)
+            # Dùng box_xyxy để crop object (chính xác hơn)
+            x1, y1, x2, y2 = map(int, box_xyxy)
+            
+            # Đảm bảo tọa độ trong giới hạn frame
+            x1 = max(0, min(x1, frame_w))
+            y1 = max(0, min(y1, frame_h))
+            x2 = max(0, min(x2, frame_w))
+            y2 = max(0, min(y2, frame_h))
 
-            x = (x - box_w) // 2
-            y = (y - box_h) // 2
-
-            x = max(0, min(x, frame_w))
-            y = max(0, min(y, frame_h))
-            w = min(box_w, frame_w - x)
-            h = min(box_h, frame_h - y)
-
-            obj_frame_b64 = Base64.encode_frame(frame[y:y+h, x:x+w])
+            # Crop object frame
+            obj_frame_b64 = Base64.encode_frame(frame[y1:y2, x1:x2])
 
             # Output 1: Object
             yield json.dumps({
@@ -196,8 +214,7 @@ class DetectVehicle(FlatMapFunction):
                 "obj_frame": obj_frame_b64
             })
 
-            # Vẽ bounding box lên annotated frame
-            x1, y1, x2, y2 = map(int, box_xyxy)
+            # Vẽ bounding box lên annotated frame (dùng lại x1, y1, x2, y2)
             
             # Lấy màu theo class thay vì track_id
             if obj_type not in self.colors:
@@ -241,10 +258,45 @@ class DetectPlate(FlatMapFunction):
         if num_plate is None:
             return
         
+        # Kiểm tra biển số hợp lệ
+        if not self.check_valid_plate(num_plate):
+            return
+        
         obj_data["num_plate"] = num_plate
         obj_data["plate_frame"] = Base64.encode_frame(plate_frame)
 
         yield json.dumps(obj_data)
+    
+    def check_valid_plate(self, plate: str):
+        """
+        Kiểm tra biển số hợp lệ theo format Việt Nam:
+        - Độ dài: 7-9 ký tự
+        - 2 ký tự đầu: SỐ
+        - Ký tự thứ 3: CHỮ
+        - 4 ký tự cuối: SỐ
+        
+        Format:
+        - 7 ký tự: 29A1234
+        - 8 ký tự: 29A12345
+        - 9 ký tự: 29AB1234 hoặc 29A123456 (tùy vùng)
+        """
+        if not plate or not (7 <= len(plate) <= 9):
+            return False
+        
+        # Kiểm tra 2 ký tự đầu là số
+        if not (plate[0].isdigit() and plate[1].isdigit()):
+            return False
+        
+        # Kiểm tra ký tự thứ 3 là chữ
+        if not plate[2].isalpha():
+            return False
+        
+        # Kiểm tra 4 ký tự cuối là số
+        last_4 = plate[-4:]
+        if not all(c.isdigit() for c in last_4):
+            return False
+        
+        return True
 
 class VoteBestPlate(KeyedProcessFunction):
 

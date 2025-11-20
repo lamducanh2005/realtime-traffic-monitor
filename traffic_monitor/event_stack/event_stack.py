@@ -61,7 +61,13 @@ class EventStack(QWidget):
             num_plate = payload.get('num_plate') or '--'
             timestamp = payload.get('timestamp') or ''
             plate_frame = payload.get('plate_frame', None)
-            item = EventItem(num_plate=num_plate, timestamp=timestamp, plate_frame=plate_frame)
+            obj_frame = payload.get('obj_frame', None)
+            item = EventItem(
+                num_plate=num_plate, 
+                timestamp=timestamp, 
+                plate_frame=plate_frame,
+                obj_frame=obj_frame
+            )
             self.add_event(item)
         except Exception:
             pass
@@ -98,24 +104,38 @@ class EventStack(QWidget):
                 # Extract data from new message structure
                 num_plate = data.get('num_plate') or '--'
                 timestamp = data.get('timestamp') or ''
-                frame_b64 = data.get('plate_frame')
+                plate_frame_b64 = data.get('plate_frame')
+                obj_frame_b64 = data.get('obj_frame')
                 plate_frame = None
+                obj_frame = None
 
-                if frame_b64:
+                # Decode plate frame
+                if plate_frame_b64:
                     try:
-                        b = base64.b64decode(frame_b64)
+                        b = base64.b64decode(plate_frame_b64)
                         arr = np.frombuffer(b, dtype=np.uint8)
                         frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-                        # Resize to match EventItem thumbnail size
                         if frame is not None:
-                            plate_frame = cv2.resize(frame, (80, 80))
+                            plate_frame = frame
                     except Exception:
                         plate_frame = None
+
+                # Decode obj frame
+                if obj_frame_b64:
+                    try:
+                        b = base64.b64decode(obj_frame_b64)
+                        arr = np.frombuffer(b, dtype=np.uint8)
+                        frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+                        if frame is not None:
+                            obj_frame = frame
+                    except Exception:
+                        obj_frame = None
 
                 payload = {
                     'num_plate': num_plate,
                     'timestamp': timestamp,
                     'plate_frame': plate_frame,
+                    'obj_frame': obj_frame,
                 }
 
                 # emit signal (thread-safe, queued) to update GUI
@@ -124,7 +144,12 @@ class EventStack(QWidget):
                 except Exception:
                     # last-resort fallback to direct add (shouldn't be needed)
                     try:
-                        self.add_event(EventItem(num_plate=num_plate, timestamp=timestamp, plate_frame=plate_frame))
+                        self.add_event(EventItem(
+                            num_plate=num_plate, 
+                            timestamp=timestamp, 
+                            plate_frame=plate_frame,
+                            obj_frame=obj_frame
+                        ))
                     except Exception:
                         pass
 
