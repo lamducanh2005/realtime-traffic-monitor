@@ -27,9 +27,9 @@ def kafka_consumer_worker(camera_id: str, frame_queue: Queue, topic: str, bootst
             bootstrap_servers=bootstrap_servers,
             auto_offset_reset='latest',
             enable_auto_commit=True,
-            fetch_min_bytes=1,
+            fetch_min_bytes=1024,
             fetch_max_wait_ms=100,
-            max_poll_records=500
+            max_poll_records=50
         )
 
         for msg in consumer:
@@ -78,14 +78,22 @@ class VideoPanel(QWidget):
         self.topic = topic
         
         # Queue để communicate giữa Kafka process và UI process
-        self.frame_queue = Queue(maxsize=300)
+        self.frame_queue = Queue(maxsize=1000)
         self.consumer_process = None
         self.is_running = False
         
         # Frame Buffer (FIFO queue) để chống giật lag
-        self.frame_buffer = deque(maxlen=300)
+        self.frame_buffer = deque(maxlen=1000)
         self.buffer_ready = False
         self.target_buffer_size = 150
+        
+        # Timing control
+        self.target_fps = 20  # FPS mục tiêu
+        self.frame_interval = 1.0 / self.target_fps  # 0.05s = 50ms
+        self.last_display_time = time.time()
+        
+        # Adaptive playback speed
+        self.playback_speed = 1.0  # Tốc độ phát (1.0 = normal)
         
         self.setStyleSheet("background-color: #1e1e1e")
         self.main_layout = QVBoxLayout()
@@ -126,17 +134,19 @@ class VideoPanel(QWidget):
         print(f"[{self.camera_id}] Kafka consumer process started (PID: {self.consumer_process.pid})")
 
     def start_display_timer(self):
-        """Timer: Lấy frame từ Queue và hiển thị đều đặn (30fps)"""
+        """Timer: Lấy frame từ Queue và hiển thị đều đặn"""
         self.display_timer = QTimer()
         self.display_timer.timeout.connect(self._pull_and_display_frame)
-        self.display_timer.start(55)  # ~30fps
+        self.display_timer.start(20)  # ~60fps check, nhưng chỉ hiển thị 20fps
 
     def _pull_and_display_frame(self):
         """Pull frame từ Queue sang buffer"""
+        current_time = time.time()
+        
         # Lấy hết frame từ Queue vào buffer
         while not self.frame_queue.empty():
             try:
-                frame_data = self.frame_queue.get(block=False)  # THÊM: Lấy tuple (frame, timestamp)
+                frame_data = self.frame_queue.get(block=False)
                 
                 # Unpack frame và timestamp
                 if isinstance(frame_data, tuple):
@@ -145,7 +155,7 @@ class VideoPanel(QWidget):
                     frame = frame_data
                     timestamp = None
                 
-                self.frame_buffer.append((frame, timestamp))  # THÊM: Lưu cả timestamp
+                self.frame_buffer.append((frame, timestamp))
                 
                 if not self.buffer_ready and len(self.frame_buffer) >= self.target_buffer_size:
                     self.buffer_ready = True
@@ -163,8 +173,32 @@ class VideoPanel(QWidget):
                 self.update_frame(placeholder, None)
             return
 
+        # Adaptive playback speed dựa trên buffer size
+        buffer_size = len(self.frame_buffer)
+        print(f'{buffer_size}/100')
+        
+        if buffer_size > self.target_buffer_size * 2:
+            # Buffer quá đầy → tăng tốc độ phát
+            self.playback_speed = 1.1
+        elif buffer_size < self.target_buffer_size * 0.2:
+            self.playback_speed = 0.1
+        elif buffer_size < self.target_buffer_size * 0.5:
+            self.playback_speed = 0.4
+        elif buffer_size < self.target_buffer_size * 1.5:
+            self.playback_speed = 0.8
+        else:
+            self.playback_speed = 1
+        
+        # Chỉ hiển thị frame khi đã đủ thời gian
+        adjusted_interval = self.frame_interval / self.playback_speed
+        elapsed = current_time - self.last_display_time
+        
+        if elapsed < adjusted_interval:
+            return  # Chưa đến lúc hiển thị frame tiếp theo
+        
+        # Hiển thị frame
         if len(self.frame_buffer) > 0:
-            frame_data = self.frame_buffer.popleft()  # THÊM: Lấy tuple
+            frame_data = self.frame_buffer.popleft()
             
             if isinstance(frame_data, tuple):
                 frame, timestamp = frame_data
@@ -174,9 +208,10 @@ class VideoPanel(QWidget):
             
             self.frame_updated.emit(frame)
             
-            # THÊM: Emit signal với timestamp
             if timestamp:
                 self.frame_displayed.emit(timestamp)
+            
+            self.last_display_time = current_time
         else:
             self.buffer_ready = False
             print(f"[{self.camera_id}] Buffer underrun! Re-buffering...")
