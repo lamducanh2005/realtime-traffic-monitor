@@ -1,13 +1,12 @@
-import cv2
-from ultralytics import YOLO
-from pyflink.datastream.functions import FlatMapFunction, MapFunction, KeyedProcessFunction
-import json
-import numpy as np
-import base64
-from .utils import Base64
-import torch
-import time
+from pyflink.datastream.functions import FlatMapFunction, KeyedProcessFunction
+from pyflink.datastream.state import ValueStateDescriptor
 from pyflink.common import Types
+from ultralytics import YOLO
+import torch
+import json, time, cv2
+import numpy as np
+from .utils import Base64, MongoVehicleService
+
 
 def detect_and_crop_plate(vehicle_frame, plate_model):
     """
@@ -34,7 +33,6 @@ def detect_and_crop_plate(vehicle_frame, plate_model):
     cropped_frame = vehicle_frame[y1:y2, x1:x2]
 
     return cropped_frame
-
 
 def ocr_plate(plate_frame, ocr_model):
     """
@@ -103,16 +101,23 @@ def ocr_plate(plate_frame, ocr_model):
 
     return num_plate
 
-
 class DetectVehicle(FlatMapFunction):
     """
-    Thực hiện tracking và chỉ yield ra objects
-    Không vẽ bounding box, không yield annotated frame
+    Thực hiện tracking và tạo 2 loại output:
+    1. Objects: Từng object riêng lẻ (type="object")
+    2. Annotated frame: Frame đã vẽ bounding box (type="annotated_frame")
     """
     
     def __init__(self):
         self.model = None
         self.device = None
+        self.colors = {}
+        self.class_names = {
+            2: 'car',
+            3: 'motorcycle',
+            5: 'bus',
+            7: 'truck'
+        }
     
     def open(self, runtime_context):
         self.model = YOLO("resources/models/yolo11n.onnx")
@@ -139,16 +144,25 @@ class DetectVehicle(FlatMapFunction):
             )
         
         if results[0].boxes.id is None:
+            yield json.dumps({
+                "type": "annotated_frame",
+                "camera_id": cam_id,
+                "timestamp": timestamp,
+                "frame": data['frame']
+            })
             return
 
+        boxes = results[0].boxes.xywh.cpu().numpy()
         boxes_xyxy = results[0].boxes.xyxy.cpu().numpy()
         track_ids = results[0].boxes.id.cpu().numpy().astype(int)
         classes = results[0].boxes.cls.cpu().numpy().astype(int)
 
         frame_h, frame_w = frame.shape[:2]
+        annotated_frame = frame.copy()
 
-        # Chỉ yield objects
-        for box_xyxy, track_id, obj_type in zip(boxes_xyxy, track_ids, classes):
+        # Yield từng object
+        for box, box_xyxy, track_id, obj_type in zip(boxes, boxes_xyxy, track_ids, classes):
+            # Dùng box_xyxy để crop object (chính xác hơn)
             x1, y1, x2, y2 = map(int, box_xyxy)
             
             # Đảm bảo tọa độ trong giới hạn frame
@@ -158,12 +172,11 @@ class DetectVehicle(FlatMapFunction):
             y2 = max(0, min(y2, frame_h))
 
             # Crop object frame
-            start = time.time()
             obj_frame_b64 = Base64.encode_frame(frame[y1:y2, x1:x2])
-            end = time.time()
-            print(f'Encode object = {(end - start) * 1000:.2f}ms')
 
+            # Output 1: Object
             yield json.dumps({
+                "type": "object",
                 "camera_id": cam_id,
                 "timestamp": timestamp,
                 "obj_id": str(track_id),
@@ -172,7 +185,29 @@ class DetectVehicle(FlatMapFunction):
                 "obj_frame": obj_frame_b64
             })
 
-    
+            # Vẽ bounding box lên annotated frame (dùng lại x1, y1, x2, y2)
+            
+            # Lấy màu theo class thay vì track_id
+            if obj_type not in self.colors:
+                self.colors[obj_type] = tuple(int(c) for c in np.random.randint(0, 255, 3))
+            color = self.colors[obj_type]
+            
+            # Lấy tên class
+            class_name = self.class_names.get(obj_type, f"class_{obj_type}")
+            
+            cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), color, 2)
+            cv2.putText(annotated_frame, class_name, (x1, y1-5),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+
+        # Output 2: Annotated frame
+        annotated_frame_b64 = Base64.encode_frame(annotated_frame)
+        yield json.dumps({
+            "type": "annotated_frame",
+            "camera_id": cam_id,
+            "timestamp": timestamp,
+            "frame": annotated_frame_b64
+        })
+
 class DetectPlate(FlatMapFunction):
 
     def open(self, runtime_context):
@@ -181,13 +216,9 @@ class DetectPlate(FlatMapFunction):
 
     def flat_map(self, value):
         obj_data = json.loads(value)
-        start = time.time()
-        obj_frame = Base64.decode_frame(obj_data["obj_frame"])
-        end = time.time()
-        print(f'Decode object = {(end - start) * 1000:.2f}ms')
 
+        obj_frame = Base64.decode_frame(obj_data["obj_frame"])
         plate_frame = detect_and_crop_plate(obj_frame, self.plate_model)
-        
 
         if plate_frame is None:
             return
@@ -197,7 +228,7 @@ class DetectPlate(FlatMapFunction):
         if num_plate is None:
             return
         
-
+        # Kiểm tra biển số hợp lệ
         if not self.check_valid_plate(num_plate):
             return
         
@@ -211,7 +242,7 @@ class DetectPlate(FlatMapFunction):
     
     def format_plate(self, plate: str):
         return plate
-
+    
 class CarDetectPlate(DetectPlate):
     def check_valid_plate(self, plate: str):
         """
@@ -408,7 +439,6 @@ class Detect(FlatMapFunction):
             
             return True
 
-
     def format_plate(self, plate, obj_type=3):
         """
         Format biển số theo loại xe
@@ -428,9 +458,12 @@ class ReducePlate(KeyedProcessFunction):
     - Vote: Biển số xuất hiện nhiều nhất
     - Frame: Lấy frame đầu tiên của biển số đó
     """
-    
+    def __init__(self):
+        self.vehicle_db = None
+
     def open(self, runtime_context):
-        from pyflink.datastream.state import ValueStateDescriptor
+        
+        self.vehicle_db = MongoVehicleService()
         
         # State: {num_plate: [(timestamp, obj_frame_b64, plate_frame_b64, obj_type), ...]}
         self.plate_candidates = runtime_context.get_state(
@@ -527,6 +560,8 @@ class ReducePlate(KeyedProcessFunction):
         # Parse key "camera_id_obj_id"
         key = ctx.get_current_key()
         cam_id, obj_id = key.split("_", 1)
+
+        warning = self.vehicle_db.check_vehicle(num_plate=best_plate)
         
         # Emit kết quả
         result = {
@@ -536,10 +571,14 @@ class ReducePlate(KeyedProcessFunction):
             "timestamp": first_record["timestamp"],
             "obj_frame": first_record["obj_frame"],
             "plate_frame": first_record["plate_frame"],
+            "warning": warning,
             # "obj_type": first_record["obj_type"],
             "vote_count": vote_counts[best_plate],
             "total_detections": sum(vote_counts.values())
         }
+
+        self.vehicle_db.log_vehicle(best_plate)
+
         
         yield json.dumps(result)
         

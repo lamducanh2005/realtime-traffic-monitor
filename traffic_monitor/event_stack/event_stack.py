@@ -10,7 +10,7 @@ from .event_item import EventItem
 
 
 CAMERA_EVENT_TOPIC = "cam_event"
-BOOTSTRAP_SERVER = [f"localhost:{i}" for i in range(9092, 9092 + 6)]
+BOOTSTRAP_SERVER = [f"192.168.0.106:{i}" for i in range(9092, 9092 + 6)]
 
 
 class EventStack(QWidget):
@@ -108,10 +108,12 @@ class EventStack(QWidget):
             timestamp = payload.get('timestamp') or ''
             plate_frame = payload.get('plate_frame', None)
             obj_frame = payload.get('obj_frame', None)
-            
+            warning = payload.get('warning', '') or ''
+
             item = EventItem(
                 num_plate=num_plate, 
                 timestamp=timestamp, 
+                warning=warning,
                 plate_frame=plate_frame,
                 obj_frame=obj_frame
             )
@@ -179,6 +181,7 @@ class EventStack(QWidget):
                 payload = {
                     'num_plate': num_plate,
                     'timestamp': timestamp,
+                    'warning': data.get('warning', ''),
                     'plate_frame': plate_frame,
                     'obj_frame': obj_frame,
                 }
@@ -190,8 +193,9 @@ class EventStack(QWidget):
                     # last-resort fallback to direct add (shouldn't be needed)
                     try:
                         self.add_event(EventItem(
-                            num_plate=num_plate, 
-                            timestamp=timestamp, 
+                            num_plate=num_plate,
+                            timestamp=timestamp,
+                            warning=data.get('warning', ''),
                             plate_frame=plate_frame,
                             obj_frame=obj_frame
                         ))

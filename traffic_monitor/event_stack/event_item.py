@@ -6,9 +6,17 @@ import numpy as np
 
 
 class EventItem(QWidget):
-    def __init__(self, num_plate: str = "--", timestamp: str = "--", plate_frame: np.ndarray = None, obj_frame: np.ndarray = None):
+    def __init__(
+            self, 
+            num_plate: str = "--", 
+            timestamp: str = "--",
+            warning: str = "",
+            plate_frame: np.ndarray = None, 
+            obj_frame: np.ndarray = None
+        ):
         super().__init__()
         self.num_plate = num_plate
+        self.warning = warning
         self.timestamp = timestamp
         self.plate_frame = plate_frame
         self.obj_frame = obj_frame
@@ -75,12 +83,26 @@ class EventItem(QWidget):
         info_layout = QVBoxLayout()
         info_layout.setSpacing(4)
         
-        self.num_plate_label = QLabel(f"Biển số: {self.num_plate}")
-        self.num_plate_label.setStyleSheet("""
+        # Hiển thị biển số; nếu có warning thì đổi màu sang đỏ và thêm chú thích
+        display_text = f"Biển số: {self.num_plate}"
+        css = """
             color: #00ff88; 
             font-weight: bold; 
             font-size: 14px;
-        """)
+        """
+        if isinstance(self.warning, str) and self.warning.strip():
+            display_text = f"Biển số: {self.num_plate} ({self.warning})"
+            css = """
+                color: #ff4444; 
+                font-weight: bold; 
+                font-size: 14px;
+            """
+
+        self.num_plate_label = QLabel(display_text)
+        self.num_plate_label.setStyleSheet(css)
+        # Thêm tooltip để dễ đọc warning nếu bị cắt
+        if isinstance(self.warning, str) and self.warning.strip():
+            self.num_plate_label.setToolTip(self.warning)
         
         self.time_label = QLabel(f"Thời gian: {self.timestamp}")
         self.time_label.setStyleSheet("""
