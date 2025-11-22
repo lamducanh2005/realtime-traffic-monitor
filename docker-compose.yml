@@ -3,15 +3,17 @@ version: '3'
 services:
 
   zookeeper:
-    image: confluentinc/cp-zookeeper:7.5.0
-    container_name: zookeeper
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
+      image: confluentinc/cp-zookeeper:7.5.0
+      container_name: zookeeper
+      ports:
+        - "2181:2181"
+      environment:
+        ZOOKEEPER_CLIENT_PORT: 2181
+        ZOOKEEPER_TICK_TIME: 2000
 
-  kafka:
+  kafka1:
     image: confluentinc/cp-kafka:7.5.0
-    container_name: kafka
+    container_name: kafka1
     depends_on:
       - zookeeper
     ports:
@@ -19,40 +21,141 @@ services:
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka1:29092,PLAINTEXT_HOST://192.168.0.106:9092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+  kafka2:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka2
+    depends_on:
+      - zookeeper
+    ports:
+      - "9093:9093"
+    environment:
+      KAFKA_BROKER_ID: 2
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka2:29093,PLAINTEXT_HOST://192.168.0.106:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+  kafka3:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka3
+    depends_on:
+      - zookeeper
+    ports:
+      - "9094:9094"
+    environment:
+      KAFKA_BROKER_ID: 3
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka3:29094,PLAINTEXT_HOST://192.168.0.106:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+  kafka4:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka4
+    depends_on:
+      - zookeeper
+    ports:
+      - "9095:9095"
+    environment:
+      KAFKA_BROKER_ID: 4
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka4:29095,PLAINTEXT_HOST://192.168.0.106:9095
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+  kafka5:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka5
+    depends_on:
+      - zookeeper
+    ports:
+      - "9096:9096"
+    environment:
+      KAFKA_BROKER_ID: 5
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka5:29096,PLAINTEXT_HOST://192.168.0.106:9096
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+  kafka6:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka6
+    depends_on:
+      - zookeeper
+    ports:
+      - "9097:9097"
+    environment:
+      KAFKA_BROKER_ID: 6
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka6:29097,PLAINTEXT_HOST://192.168.0.106:9097
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
   kafka-ui:
       image: provectuslabs/kafka-ui:latest
       container_name: kafka-ui
       depends_on:
-        - kafka
+        - kafka1
+        - kafka2
+        - kafka3
+        - kafka4
+        - kafka5
+        - kafka6
       ports:
         - "8010:8080"
       environment:
         KAFKA_CLUSTERS_0_NAME: local
-        KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
-        KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+        KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka1:29092,kafka2:29093,kafka3:29094,kafka4:29095,kafka5:29096,kafka6:29097
+        KAFKA_CLUSTERS_0_ZOOKEEPER: 192.168.0.106:2181
 
-  jobmanager:
-    image: apache/flink:1.18-scala_2.12
-    container_name: flink-jobmanager
-    command: jobmanager
-    environment:
-      - JOB_MANAGER_RPC_ADDRESS=jobmanager
+  mongo:
+    image: mongo:6.0
+    container_name: my_mongo
+    restart: always
     ports:
-      - "8085:8081" 
-    volumes:
-      - ./flink-checkpoints:/opt/flink/checkpoints
-
-  taskmanager:
-    image: apache/flink:1.18-scala_2.12
-    container_name: flink-taskmanager
-    depends_on:
-      - jobmanager
-    command: taskmanager
+      - "27017:27017"
     environment:
-      - JOB_MANAGER_RPC_ADDRESS=jobmanager
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: 123456
     volumes:
-      - ./flink-checkpoints:/opt/flink/checkpoints
+      - mongo_data:/data/db
+
+  # jobmanager:
+  #   image: apache/flink:1.18-scala_2.12
+  #   container_name: flink-jobmanager
+  #   command: jobmanager
+  #   environment:
+  #     - JOB_MANAGER_RPC_ADDRESS=jobmanager
+  #   ports:
+  #     - "8081:8081"
+  #   expose:
+  #     - "6123"
+  #   volumes:
+  #     - ./flink-checkpoints:/opt/flink/checkpoints
+  #     # - ./resources/jars:/opt/flink/lib
+
+  # taskmanager:
+  #   image: apache/flink:1.18-scala_2.12
+  #   container_name: flink-taskmanager
+  #   depends_on:
+  #     - jobmanager
+  #   command: taskmanager
+  #   expose:
+  #     - "6121"
+  #     - "6122"
+  #   environment:
+  #     - JOB_MANAGER_RPC_ADDRESS=jobmanager
+  #     - TASK_MANAGER_NUMBER_OF_TASK_SLOTS=5
+  #   volumes:
+  #     - ./flink-checkpoints:/opt/flink/checkpoints
+  #     # - ./resources/jars:/opt/flink/lib

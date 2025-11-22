@@ -13,7 +13,7 @@ import os
 import signal
 
 CAMERA_STREAM_TOPIC = "cam_tracking"
-BOOTSTRAP_SERVER = [f"localhost:{i}" for i in range(9092, 9092 + 3)]
+BOOTSTRAP_SERVER = [f"localhost:{p}" for p in range(9092, 9092 + 6)]
 
 
 def kafka_consumer_worker(camera_id: str, frame_queue: Queue, topic: str, bootstrap_servers: list):
@@ -78,14 +78,14 @@ class VideoPanel(QWidget):
         self.topic = topic
         
         # Queue để communicate giữa Kafka process và UI process
-        self.frame_queue = Queue(maxsize=1000)
+        self.frame_queue = Queue(maxsize=5000)
         self.consumer_process = None
         self.is_running = False
         
         # Frame Buffer (FIFO queue) để chống giật lag
-        self.frame_buffer = deque(maxlen=1000)
+        self.frame_buffer = deque(maxlen=5000)
         self.buffer_ready = False
-        self.target_buffer_size = 150
+        self.target_buffer_size = 600
         
         # Timing control
         self.target_fps = 20  # FPS mục tiêu
@@ -175,19 +175,14 @@ class VideoPanel(QWidget):
 
         # Adaptive playback speed dựa trên buffer size
         buffer_size = len(self.frame_buffer)
-        print(f'{buffer_size}/100')
+        print(f'{buffer_size}/600')
         
-        if buffer_size > self.target_buffer_size * 2:
-            # Buffer quá đầy → tăng tốc độ phát
-            self.playback_speed = 1.1
-        elif buffer_size < self.target_buffer_size * 0.2:
-            self.playback_speed = 0.1
-        elif buffer_size < self.target_buffer_size * 0.5:
-            self.playback_speed = 0.4
-        elif buffer_size < self.target_buffer_size * 1.5:
-            self.playback_speed = 0.8
+        if buffer_size < self.target_buffer_size * 1.5:
+            self.playback_speed = 0.9
+        # elif buffer_size < self.target_buffer_size * 1.5:
+        #     self.playback_speed = 1.1
         else:
-            self.playback_speed = 1
+            self.playback_speed = 1.1
         
         # Chỉ hiển thị frame khi đã đủ thời gian
         adjusted_interval = self.frame_interval / self.playback_speed

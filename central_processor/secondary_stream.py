@@ -4,15 +4,13 @@ from pyflink.common.serialization import SimpleStringSchema
 from pyflink.common import WatermarkStrategy, Types
 from pathlib import Path
 from .detect_processor import FrameProcessor
-from .plate_processor import Detect, ReducePlate
-from .stats_processor import CountVehicleSimple
-import os
 import json
 
 
-class MainStream:
+class SecondaryStream:
     """
-    Class quản lý streaming pipeline cho xử lý video từ camera
+    Job 2: Đơn giản - chỉ vẽ bounding box lên frames
+    Nhận cam_raw, detect + vẽ khung, gửi đến cam_tracking
     """
     
     # Constants
@@ -21,19 +19,16 @@ class MainStream:
 
     # Generate 6 bootstrap broker addresses compactly
     KAFKA_BOOTSTRAP_SERVER = ",".join(f"192.168.0.106:{p}" for p in range(9092, 9092 + 6))
-    SOURCE_TOPIC = "cam_raw"
-    EVENTS_TOPIC = "cam_event"
-    STATS_TOPIC = "cam_statistic"
-    TEST_TOPIC = "cam_test_topic"
+    SOURCE_TOPIC = "cam_raw"  # Nhận từ camera
+    TRACKING_TOPIC = "cam_tracking"
 
     def __init__(self):
         """
-        Khởi tạo các thành phần của streaming pipeline
+        Khởi tạo các thành phần của streaming pipeline thứ 2
         """
         self.env: StreamExecutionEnvironment = None
         self.source: KafkaSource = None
-        self.events_sink: KafkaSink = None
-        self.stats_sink: KafkaSink = None
+        self.tracking_sink: KafkaSink = None
 
     def set_up(self):
         """
@@ -52,36 +47,25 @@ class MainStream:
         self.env.set_runtime_mode(RuntimeExecutionMode.STREAMING)
         self.env.set_parallelism(1)
 
-        # Tạo kafka source
+        # Tạo kafka source - nhận từ cam_raw
         self.source = (
             KafkaSource.builder()
             .set_bootstrap_servers(self.KAFKA_BOOTSTRAP_SERVER)
             .set_topics(self.SOURCE_TOPIC)
-            .set_group_id("plate")
+            .set_group_id("frame_tracking")
             .set_starting_offsets(KafkaOffsetsInitializer.latest())
             .set_value_only_deserializer(SimpleStringSchema())
             .build()
         )
 
-        # Tạo kafka sink
-        self.events_sink = (
+        # Tạo kafka sink cho tracking (annotated frames)
+        self.tracking_sink = (
             KafkaSink.builder()
             .set_bootstrap_servers(self.KAFKA_BOOTSTRAP_SERVER)
             .set_record_serializer(
                 KafkaRecordSerializationSchema.builder()
-                .set_topic(self.EVENTS_TOPIC)
-                .set_value_serialization_schema(SimpleStringSchema())
-                .build()
-            )
-            .build()
-        )
-
-        self.stats_sink = (
-            KafkaSink.builder()
-            .set_bootstrap_servers(self.KAFKA_BOOTSTRAP_SERVER)
-            .set_record_serializer(
-                KafkaRecordSerializationSchema.builder()
-                .set_topic("cam_test_topic_2")
+                .set_topic(self.TRACKING_TOPIC)
+                .set_key_serialization_schema(SimpleStringSchema())
                 .set_value_serialization_schema(SimpleStringSchema())
                 .build()
             )
@@ -90,40 +74,28 @@ class MainStream:
 
     def process_stream(self):
         """
-        Xử lý luồng dữ liệu từ Kafka source
+        Job 2: Chỉ vẽ bounding box lên frames
         """
+        # Nhận frames từ Kafka (cam_raw)
         stream = self.env.from_source(
             self.source,
             WatermarkStrategy.no_watermarks(),
-            "frame_processor",
+            "frame_tracking",
             Types.STRING()
         )
 
-        # Sử dụng DetectVehicle để có objects (bỏ annotated frame)
-        main_stream = (
+        # Vẽ bounding box lên frames
+        annotated_stream = (
             stream
-            .key_by(lambda x: json.loads(x).get("camera_id"), key_type=Types.STRING())
-            .flat_map(Detect(), output_type=Types.STRING())
-            .key_by(
-                lambda x: f"{json.loads(x)['camera_id']}_{json.loads(x)['obj_id']}", 
-                key_type=Types.STRING()
-            )
-            .process(ReducePlate(), output_type=Types.STRING())
+            .map(FrameProcessor(), output_type=Types.STRING())
         )
 
-        # counting_stream = (
-        #     main_stream
-        #     .key_by(lambda x: json.loads(x).get("camera_id"), key_type=Types.STRING())
-        #     .process(CountVehicleSimple(), output_type=Types.STRING())
-        # )
-
-        # Gửi kết quả (bỏ annotated frames)
-        main_stream.sink_to(self.events_sink)
-        # counting_stream.sink_to(self.stats_sink)
+        # Gửi annotated frames đến cam_tracking
+        annotated_stream.sink_to(self.tracking_sink)
 
     def execute_job(self):
         """
-        Thực thi Flink job
+        Thực thi Flink job thứ 2
         """
-        print("Executing job...")
-        self.env.execute("main_stream")
+        print("Executing secondary job...")
+        self.env.execute("secondary_stream")

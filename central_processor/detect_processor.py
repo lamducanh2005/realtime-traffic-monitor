@@ -9,17 +9,32 @@ from typing import Iterator
 
 
 class FrameProcessor(MapFunction):
-    """Xử lý frame: decode, detect và vẽ bounding box"""
+    """Xử lý frame: decode, detect và vẽ bounding box (không tracking)"""
     
     def __init__(self):
         super().__init__()
         self.model = None
-        self.colors = {}
         self.device = None
+        # Định nghĩa màu sắc cho từng class
+        self.class_colors = {
+            1: (255, 255, 0),   # bicycle - cyan
+            2: (0, 165, 255),   # car - orange
+            3: (0, 255, 0),     # motorcycle - green
+            5: (0, 165, 255),   # bus - orange
+            7: (0, 165, 255),   # truck - orange
+        }
+        # Tên class
+        self.class_names = {
+            0: 'person',
+            1: 'bicycle',
+            2: 'car',
+            3: 'motorbike',
+            5: 'bus',
+            7: 'truck'
+        }
     
     def open(self, runtime_context):
         """Khởi tạo model khi bắt đầu"""
-        
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
         onnx_path = "resources/models/yolo11n.onnx"
         self.model = YOLO(onnx_path)
@@ -37,37 +52,38 @@ class FrameProcessor(MapFunction):
             if frame is None:
                 return None
             
-            # Chạy tracking
+            # Chạy detection (không tracking)
             with torch.no_grad():
-                results = self.model.track(
+                results = self.model.predict(
                     frame,
-                    persist=True,
-                    classes=[2, 3, 5, 7],
+                    classes=[1, 2, 3, 5, 7],  # bicycle, car, motorbike, bus, truck
                     imgsz=480,
                     conf=0.4,
                     iou=0.5,
                     verbose=False,
                     half=True,
                     device=self.device,
-                    tracker='bytetrack.yaml',
                 )
             
             res = results[0]
             
             # Vẽ bounding box
-            if hasattr(res.boxes, 'id') and res.boxes.id is not None:
+            if len(res.boxes) > 0:
                 boxes = res.boxes.xyxy.cpu().numpy()
-                track_ids = res.boxes.id.cpu().numpy().astype(int)
+                classes = res.boxes.cls.cpu().numpy().astype(int)
                 
-                for box, track_id in zip(boxes, track_ids):
+                for box, cls in zip(boxes, classes):
                     x1, y1, x2, y2 = map(int, box)
                     
-                    if track_id not in self.colors:
-                        self.colors[track_id] = tuple(int(c) for c in np.random.randint(0, 255, 3))
-                    color = self.colors[track_id]
+                    # Lấy màu và tên class
+                    color = self.class_colors.get(cls, (255, 255, 255))
+                    class_name = self.class_names.get(cls, f'class_{cls}')
                     
+                    # Vẽ bounding box
                     cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-                    cv2.putText(frame, str(track_id), (x1, y1-5),
+                    
+                    # Vẽ tên class
+                    cv2.putText(frame, class_name, (x1, y1 - 5),
                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
             
             # Encode frame về base64

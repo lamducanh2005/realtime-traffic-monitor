@@ -2,12 +2,12 @@ import cv2
 import base64
 import json
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from PyQt6.QtCore import QThread, pyqtSignal
 from kafka import KafkaProducer
 
 
-BOOTSTRAP_SERVER = [f"localhost:{i}" for i in range(9092, 9092 + 3)]
+BOOTSTRAP_SERVER = [f"192.168.0.106:{i}" for i in range(9092, 9092 + 6)]
 STREAMING_TOPIC = "cam_raw"
 
 class CameraThread(QThread):
@@ -33,6 +33,10 @@ class CameraThread(QThread):
         # Cấu hình theo loại camera
         self.is_intersection = (camera_id % 2 == 0)
         
+        # Buffer để delay hiển thị 5 giây
+        self.display_buffer = []
+        self.display_delay = 30.0  # seconds
+        
     def run(self):
         """Chạy camera thread"""
         if not self.video_path:
@@ -57,22 +61,34 @@ class CameraThread(QThread):
                 self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                 continue
             
-            # timestamp
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            # Timestamp hiện tại
+            current_time = datetime.now()
+            
+            # Timestamp + 5 giây (để khi delay 5s thì hiển thị đúng thời gian)
+            timestamp_send = (current_time + timedelta(seconds=self.display_delay)).strftime("%Y-%m-%d %H:%M:%S")
 
             # Resize frame về 1280x720
             # frame = cv2.resize(frame, (1280, 720))
 
-            # Viết ngày tháng giờ lên frame nhìn cho giống camera
+            # Viết timestamp (+5s) lên frame
             annotated_frame = frame.copy()
-            cv2.putText(annotated_frame, f"Cam {self.camera_id} - {timestamp}", 
+            cv2.putText(annotated_frame, f"Cam {self.camera_id} - {timestamp_send}", 
                        (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
-            # Hiển thị lên màn hình (LUÔN hiển thị để UI mượt)
-            self.frame_ready.emit(annotated_frame.copy())
+            # Thêm vào buffer để delay hiển thị 5 giây
+            self.display_buffer.append({
+                'frame': annotated_frame.copy(),
+                'time': time.time()
+            })
+            
+            # Hiển thị frame đã delay 5 giây
+            current_timestamp = time.time()
+            while self.display_buffer and (current_timestamp - self.display_buffer[0]['time']) >= self.display_delay:
+                delayed_frame = self.display_buffer.pop(0)
+                self.frame_ready.emit(delayed_frame['frame'])
 
-            # Gửi frame tới Kafka
-            self._send_streaming(annotated_frame.copy(), timestamp)
+            # Gửi frame tới Kafka với timestamp tăng 5 giây (NGAY LẬP TỨC)
+            self._send_streaming(annotated_frame.copy(), timestamp_send)
             
             # Control FPS
             elapsed = time.time() - last_time
@@ -87,7 +103,7 @@ class CameraThread(QThread):
         """Gửi dữ liệu streaming tới STREAMING_TOPIC"""
         try:
             # Chuyển thành base64, giảm chất lượng ảnh
-            encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 50]
+            encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 60]
             _, buffer = cv2.imencode('.jpg', frame, encode_param)
             frame_base64 = base64.b64encode(buffer).decode('utf-8')
             

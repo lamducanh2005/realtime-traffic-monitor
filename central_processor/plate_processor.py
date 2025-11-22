@@ -106,21 +106,13 @@ def ocr_plate(plate_frame, ocr_model):
 
 class DetectVehicle(FlatMapFunction):
     """
-    Thực hiện tracking và tạo 2 loại output:
-    1. Objects: Từng object riêng lẻ (type="object")
-    2. Annotated frame: Frame đã vẽ bounding box (type="annotated_frame")
+    Thực hiện tracking và chỉ yield ra objects
+    Không vẽ bounding box, không yield annotated frame
     """
     
     def __init__(self):
         self.model = None
         self.device = None
-        self.colors = {}
-        self.class_names = {
-            2: 'car',
-            3: 'motorcycle',
-            5: 'bus',
-            7: 'truck'
-        }
     
     def open(self, runtime_context):
         self.model = YOLO("resources/models/yolo11n.onnx")
@@ -147,25 +139,16 @@ class DetectVehicle(FlatMapFunction):
             )
         
         if results[0].boxes.id is None:
-            yield json.dumps({
-                "type": "annotated_frame",
-                "camera_id": cam_id,
-                "timestamp": timestamp,
-                "frame": data['frame']
-            })
             return
 
-        boxes = results[0].boxes.xywh.cpu().numpy()
         boxes_xyxy = results[0].boxes.xyxy.cpu().numpy()
         track_ids = results[0].boxes.id.cpu().numpy().astype(int)
         classes = results[0].boxes.cls.cpu().numpy().astype(int)
 
         frame_h, frame_w = frame.shape[:2]
-        annotated_frame = frame.copy()
 
-        # Yield từng object
-        for box, box_xyxy, track_id, obj_type in zip(boxes, boxes_xyxy, track_ids, classes):
-            # Dùng box_xyxy để crop object (chính xác hơn)
+        # Chỉ yield objects
+        for box_xyxy, track_id, obj_type in zip(boxes_xyxy, track_ids, classes):
             x1, y1, x2, y2 = map(int, box_xyxy)
             
             # Đảm bảo tọa độ trong giới hạn frame
@@ -175,11 +158,12 @@ class DetectVehicle(FlatMapFunction):
             y2 = max(0, min(y2, frame_h))
 
             # Crop object frame
+            start = time.time()
             obj_frame_b64 = Base64.encode_frame(frame[y1:y2, x1:x2])
+            end = time.time()
+            print(f'Encode object = {(end - start) * 1000:.2f}ms')
 
-            # Output 1: Object
             yield json.dumps({
-                "type": "object",
                 "camera_id": cam_id,
                 "timestamp": timestamp,
                 "obj_id": str(track_id),
@@ -187,29 +171,6 @@ class DetectVehicle(FlatMapFunction):
                 "obj_type": str(obj_type),
                 "obj_frame": obj_frame_b64
             })
-
-            # Vẽ bounding box lên annotated frame (dùng lại x1, y1, x2, y2)
-            
-            # Lấy màu theo class thay vì track_id
-            if obj_type not in self.colors:
-                self.colors[obj_type] = tuple(int(c) for c in np.random.randint(0, 255, 3))
-            color = self.colors[obj_type]
-            
-            # Lấy tên class
-            class_name = self.class_names.get(obj_type, f"class_{obj_type}")
-            
-            cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), color, 2)
-            cv2.putText(annotated_frame, class_name, (x1, y1-5),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
-
-        # Output 2: Annotated frame
-        annotated_frame_b64 = Base64.encode_frame(annotated_frame)
-        yield json.dumps({
-            "type": "annotated_frame",
-            "camera_id": cam_id,
-            "timestamp": timestamp,
-            "frame": annotated_frame_b64
-        })
 
     
 class DetectPlate(FlatMapFunction):
@@ -220,9 +181,13 @@ class DetectPlate(FlatMapFunction):
 
     def flat_map(self, value):
         obj_data = json.loads(value)
-
+        start = time.time()
         obj_frame = Base64.decode_frame(obj_data["obj_frame"])
+        end = time.time()
+        print(f'Decode object = {(end - start) * 1000:.2f}ms')
+
         plate_frame = detect_and_crop_plate(obj_frame, self.plate_model)
+        
 
         if plate_frame is None:
             return
@@ -232,7 +197,7 @@ class DetectPlate(FlatMapFunction):
         if num_plate is None:
             return
         
-        # Kiểm tra biển số hợp lệ
+
         if not self.check_valid_plate(num_plate):
             return
         
@@ -320,6 +285,140 @@ class MotorDetectPlate(DetectPlate):
             return plate[:4] + '-' + plate[4:]
         return plate
      
+class Detect(FlatMapFunction):
+    def __init__(self):
+        self.model = None
+        self.device = None
+        self.plate_model = None
+        self.ocr_model = None
+    
+    def open(self, runtime_context):
+        self.model = YOLO("resources/models/yolo11n.onnx")
+        self.plate_model = YOLO('resources/models/license_plate_detector.pt')
+        self.ocr_model = YOLO('resources/models/ocr.pt')
+        self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+
+    def flat_map(self, value):
+        data = json.loads(value)
+
+        camera_id = data.get("camera_id")
+        timestamp = data.get("timestamp")
+        frame = Base64.decode_frame(data.get("frame"))
+
+        # Tracking vật thể
+        with torch.no_grad():
+            results = self.model.track(
+                frame,
+                persist=True,
+                classes=[2, 3, 5, 7],
+                imgsz=480,
+                conf=0.4,
+                iou=0.5,
+                verbose=False,
+                half=True,
+                device=self.device,
+                tracker='bytetrack.yaml',
+            )
+
+        if results[0].boxes.id is None:
+            return
+
+        boxes_xyxy = results[0].boxes.xyxy.cpu().numpy()
+        track_ids = results[0].boxes.id.cpu().numpy().astype(int)
+        classes = results[0].boxes.cls.cpu().numpy().astype(int)
+
+        frame_h, frame_w = frame.shape[:2]
+
+        # Duyệt qua từng object phát hiện được
+        for box_xyxy, track_id, obj_type in zip(boxes_xyxy, track_ids, classes):
+            x1, y1, x2, y2 = map(int, box_xyxy)
+            
+            # Đảm bảo tọa độ trong giới hạn frame
+            x1 = max(0, min(x1, frame_w))
+            y1 = max(0, min(y1, frame_h))
+            x2 = max(0, min(x2, frame_w))
+            y2 = max(0, min(y2, frame_h))
+
+            obj_frame = frame[y1:y2, x1:x2]
+            plate_frame = detect_and_crop_plate(obj_frame, self.plate_model)
+
+            if plate_frame is None:
+                continue
+            
+            num_plate = ocr_plate(plate_frame, self.ocr_model)
+
+            if num_plate is None:
+                continue
+            
+            if not self.check_valid_plate(num_plate, obj_type=obj_type):
+                continue
+            
+            yield json.dumps({
+                "camera_id": camera_id,
+                "timestamp": timestamp,
+                "obj_id": str(track_id),
+                "num_plate": self.format_plate(num_plate, obj_type=obj_type),
+                "obj_frame": Base64.encode_frame(obj_frame),
+                "plate_frame": Base64.encode_frame(plate_frame)
+            })
+
+    def check_valid_plate(self, plate, obj_type=3):
+        """
+        Kiểm tra biển số hợp lệ theo loại xe
+        obj_type = 3: xe máy (8-9 ký tự)
+        obj_type khác: ô tô (7-8 ký tự)
+        """
+        # Kiểm tra xe máy (class 3)
+        if obj_type == 3:
+            if not plate or not (8 <= len(plate) <= 9):
+                return False
+            
+            # Kiểm tra 2 ký tự đầu là số
+            if not (plate[0].isdigit() and plate[1].isdigit()):
+                return False
+            
+            # Kiểm tra ký tự thứ 3 là chữ
+            if not plate[2].isalpha():
+                return False
+            
+            # Kiểm tra các ký tự từ vị trí 5 trở đi (index 4+) đều là số
+            remaining = plate[4:]
+            if not all(c.isdigit() for c in remaining):
+                return False
+            
+            return True
+        
+        # Kiểm tra ô tô (class 2, 5, 7)
+        else:
+            if not plate or not (7 <= len(plate) <= 8):
+                return False
+            
+            # Kiểm tra 2 ký tự đầu là số
+            if not (plate[0].isdigit() and plate[1].isdigit()):
+                return False
+            
+            # Kiểm tra ký tự thứ 3 là chữ
+            if not plate[2].isalpha():
+                return False
+            
+            # Kiểm tra các ký tự từ vị trí 4 trở đi (index 3+) đều là số
+            remaining = plate[3:]
+            if not all(c.isdigit() for c in remaining):
+                return False
+            
+            return True
+
+
+    def format_plate(self, plate, obj_type=3):
+        """
+        Format biển số theo loại xe
+        obj_type = 3: xe máy -> 29AB-1234
+        obj_type khác: ô tô -> 29A-1234
+        """
+        if obj_type == 3:
+            return plate[:4] + '-' + plate[4:]
+        else:
+            return plate[:3] + '-' + plate[3:]
 
 
 class ReducePlate(KeyedProcessFunction):
@@ -349,7 +448,7 @@ class ReducePlate(KeyedProcessFunction):
         )
         
         # Timeout: Nếu không nhận message mới sau 2 giây → emit kết quả
-        self.timeout_seconds = 5
+        self.timeout_seconds = 2
     
     def process_element(self, value, ctx):
         from datetime import datetime
@@ -362,7 +461,7 @@ class ReducePlate(KeyedProcessFunction):
         timestamp_str = data["timestamp"]
         obj_frame_b64 = data["obj_frame"]
         plate_frame_b64 = data["plate_frame"]
-        obj_type = data["obj_type"]
+        # obj_type = data["obj_type"]
         
         # Parse timestamp
         current_time = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
@@ -388,7 +487,7 @@ class ReducePlate(KeyedProcessFunction):
             "timestamp_num": current_ts,
             "obj_frame": obj_frame_b64,
             "plate_frame": plate_frame_b64,
-            "obj_type": obj_type  # Lưu obj_type
+            # "obj_type": obj_type  # Lưu obj_type
         })
         
         # Update state
@@ -437,7 +536,7 @@ class ReducePlate(KeyedProcessFunction):
             "timestamp": first_record["timestamp"],
             "obj_frame": first_record["obj_frame"],
             "plate_frame": first_record["plate_frame"],
-            "obj_type": first_record["obj_type"],
+            # "obj_type": first_record["obj_type"],
             "vote_count": vote_counts[best_plate],
             "total_detections": sum(vote_counts.values())
         }
