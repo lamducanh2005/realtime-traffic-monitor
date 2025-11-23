@@ -1,4 +1,4 @@
-![alt text](report/images/TrungTamDieuHanhHaNoi.png)
+![alt text](resources/images/TrungTamDieuHanhHaNoi.png)
 
 # Giám sát giao thông thời gian thực
 
@@ -13,7 +13,7 @@
 Dự án này xây dựng một hệ thống cơ bản cho việc giám sát giao thông theo thời gian thực, với dữ liệu được thu thập từ các camera an ninh, sử dụng công nghệ xử lý dữ liệu lớn làm nền tảng và học sâu cho các mô hình phân tích.
 
 <p align="center">
-    <a href="report/report.pdf">Xem báo cáo</a>
+    <a href="resources/report.pdf">Xem báo cáo</a>
     -
     <a href="report/report.pdf">Xem bản trình bày</a>
     -
@@ -38,8 +38,19 @@ Dự án này là một phần trong bài tập lớn cuối kỳ, môn *Công n
 
 ### Trình mô phỏng camera an ninh
 
+![alt text](resources/images/edge_devices.png)
 ### Trình giám sát giao thông
+
+![alt text](resources/images/traffic_monitor_1.png)
+
+![alt text](resources/images/traffic_monitor.png)
 
 ### Theo dõi Kafka
 
+![alt text](resources/images/kafka_ui_topics.png)
+
+![alt text](resources/images/kafka_ui_messages.png)
+
 ### Cơ sở dữ liệu
+
+![alt text](resources/images/mongo_express.png)
