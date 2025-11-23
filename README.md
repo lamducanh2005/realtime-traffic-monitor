@@ -1,4 +1,4 @@
-![alt text](resources/images/TrungTamDieuHanhHaNoi.png)
+![alt text](resources/images/system_logo.png)
 
 # Giám sát giao thông thời gian thực
 
