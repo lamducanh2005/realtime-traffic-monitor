@@ -1,0 +1,281 @@
+\chapter{Cơ sở lý thuyết}
+
+\section{Bài toán giám sát giao thông}
+
+\subsection{Tổng quan về giám sát giao thông}
+
+Giám sát giao thông (Traffic Monitoring) trong thành phố là việc thu thập các dữ liệu về giao thông, sau đó tiến hành phân tích 
+và đưa ra các quyết định tác động trở lại giao thông như cảnh báo, điều tiết hoặc ngăn chặn, nhằm giữ cho giao thông được vận hành thông suốt và trật tự.
+Ngày nay, với sự tiến bộ về công nghệ, bài toán giám sát giao thông tự động là việc thu thập dữ liệu từ hệ thống thiết bị biên như camera, cảm biến IoT,
+sau đó phân tích và xử lý tự động bằng AI và thuật toán để phát hiện sự kiện, gợi ý hành động và hiển thị thông tin thời gian thực cho người giám sát.
+
+Các hệ thống hiện đại giải quyết bài toán giám sát giao thông tự động hiện nay chủ yếu xoay quanh 3 thành phần chính: Thiết bị biên, Trung tâm xử lý, Trình giám sát.
+
+\begin{enumerate}
+  \item Thiết bị biên: 
+  \item Trung tâm xử lý và lưu trữ:
+  \item Trình giám sát:
+\end{enumerate}
+
+\subsection{Giám sát giao thông với hệ thống camera}
+
+Trong số các loại thiết bị biên, thì camera giám sát hiện là loại thiết bị phổ biến nhất ứng dụng trong giám sát giao thông, bởi tính đơn giản, tiện dụng, dễ lắp đặt, dễ tích hợp.
+Đặc điểm của camera là thu thập dữ liệu dưới dạng hình ảnh, vì vậy khi triển khai hệ thống camera trên diện rộng, lượng dữ liệu cần xử lý là rất lớn, vì vậy với hệ thống giám sát giao thông với hệ thống camera,
+ta không chỉ quan tâm với việc xử lý dữ liệu sao cho đúng, mà còn cần quan tâm tới việc truyền phát và xử lý dữ liệu như nào để nhanh, hiệu quả nhất. 
+
+\subsection{Các bài toán con}
+
+Giám sát giao thông là một bài toán lớn, tổng quát, có nhiều vấn đề. Các bài toán con tiêu biểu có thể kể đến:
+
+\begin{itemize}
+  \item Nhận diện biển số xe:
+  \item Nhận diện vượt đèn đỏ:
+  \item Nhận diện không đội mũ:
+  \item Phân tích tình trạng giao thông:
+\end{itemize}
+
+\section{Học sâu}
+
+Học sâu (Deep Learning) là một nhánh của Học máy và Trí tuệ nhân tạo, tập trung vào việc xây dựng và huấn luyện
+các mô hình dựa trên mạng nơ-ron nhân tạo. Học sâu mô phỏng cách mà não bộ con người hoạt động qua nhiều lớp nơ-ron,
+nó học qua nhiều tầng khác nhau và tự động học được các đặc trưng phức tạp từ dữ liệu đầu vào.
+So với các phương pháp học máy truyền thống, học sâu có khả năng xử lý dữ liệu với độ phức tạp cao mà không cần
+thiết kế đặc trưng thủ công. Điều này giúp học sâu được ứng dụng rộng rãi trong nhiều lĩnh vực, trong đó có thị giác máy tính.
+
+Với bài toán giám sát giao thông, mô hình học sâu sẽ tự động hóa việc nhận diện phương tiện và phân tích tình trạng giao thông.
+Trong phần này, chúng tôi sẽ trình bày chủ yếu về CNN và YOLO, hai mô hình học sâu quan trọng nhất cho bài toán nhận diện vật thể,
+cùng các kỹ thuật khác cho việc xử lý các bài toán liên quan.
+
+\subsection{YOLO trong phát hiện phương tiện}
+
+YOLO là một trong những thuật toán phát hiện đối tượng tiên tiến nhất hiện nay, được sử dụng rộng rãi trong nhiều lĩnh vực.
+
+
+\subsubsection{Kiến trúc của mô hình YOLO}
+
+\subsubsection{Ưu điểm và hạn chế của YOLO}
+
+Ưu điểm: Tốc độ xử lý nhanh; Tính linh hoạt; Dễ dàng triển khai
+
+Hạn chế: Yêu cầu dữ liệu huấn luyện đa dạng; Cần tài nguyên tính toán; Khả năng nhận diện khi vật thể bị che khuất
+
+\subsubsection{Ứng dụng YOLO trong giám sát giao thông}
+
+YOLO có thể ứng dụng để nhận diện các phương tiện đang tham gia giao thông trên đường, nhận diện vị trí biển số của phương tiện, nhận diện ví trí các kí tự trên biển số, nhận diện tín hiệu đèn tại các ngã tư, v.v.
+
+YOLO khi kết hợp với thuật toán SORT có thể thực hiện theo dõi chuyển động của vật thể, từ đó còn có thể ứng dụng vào việc nhận diện các xe vượt đèn đỏ hoặc ước lượng tốc độ xe.
+
+\subsection{CNN cho bài toán phân loại}
+
+CNN là một trong những kiến trúc quan trọng nhất trong lĩnh vực thị giác máy tính.
+
+\subsubsection{Kiến trúc của mô hình CNN}
+
+Kiến trúc của một CNN thường gồm: lớp tích chập, hàm kích hoạt, lớp pooling, lớp fc.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{images/CNN architecture.drawio.pdf}
+    \caption[Kiến trúc mô hình CNN]{Kiến trúc mô hình CNN.}
+    \label{fig:cnn-architecture}
+\end{figure}
+
+\subsubsection{Ứng dụng CNN trong giám sát giao thông}
+
+CNN có thể xác định 
+
+\subsection{Nhận diện kí tự biển số xe}
+
+Nhận diện kí tự biến số xe? Đầu vào, đầu ra?
+
+
+
+\subsection{Nhận diện tốc độ xe}
+
+Đầu vào đầu ra? Phương pháp nhận diện tốc độ xe?
+
+\subsection{Nhận diện xe vượt đèn đỏ}
+
+\subsection{Ước lượng mật độ giao thông}
+
+
+\section{Công nghệ dữ liệu lớn}
+
+\subsection{Apache Kafka}
+
+
+Apache Kafka là một hệ thống phân tán được xây dựng với mục tiêu truyền phát một lượng dữ liệu rất lớn trong thời gian thực với độ trễ thấp,
+đồng thời có khả năng mở rộng cao. Ban đầu Kafka được phát triển bởi LinkedIn, nhưng sau đó được chuyển giao và trở thành dự án mã nguồn mở 
+trong hệ sinh thái Apache và nhanh chóng được cộng đồng công nghệ chấp nhận rộng rãi.
+
+Kafka hoạt động dựa trên 3 thành phần chính:
+
+\begin{enumerate}
+    \item \textit{Producer} (Bên cung cấp): để chỉ các ứng dụng hay hệ thống nơi dữ liệu được tạo ra và cần được phân phối đến Kafka.
+    Mỗi dữ liệu truyền phát đến Kafka sẽ được sắp xếp theo các topic do người dùng lựa chọn, mỗi topic dữ liệu mang ý nghĩa và mục đích riêng,
+    phản ánh một luồng dữ liệu cụ thể cần trao đổi trong hệ thống.
+    Mỗi topic được chia thành nhiều partition, cho phép Kafka phân tán dữ liệu trên nhiều máy chủ, từ đó tăng khả năng
+    xử lý song song và hỗ trợ mở rộng khi khối lượng dữ liệu tăng.
+
+    \item \textit{Consumer} (Bên tiêu thụ): để chỉ các ứng dụng hay hệ thống cần truy cập và sử dụng dữ liệu được Kafka lưu trữ.
+    Mỗi consumer sẽ đăng kí các topic mà nó quan tâm, từ đó sẽ nhận tự động luồng dữ liệu mà producer đã gửi vào Kafka.
+    Các consumer có thể làm việc độc lập, tức là mỗi consumer sẽ nhận toàn bộ dữ liệu trong topic, hoặc hoạt động theo nhóm,
+    khi đó dữ liệu trong topic sẽ được phân phát giữa các consumer trong nhóm để xử lý song song.
+
+    \item \textit{Broker}: là các máy chủ trong hệ thống Kafka, chịu trách nhiệm nhận và lưu trữ dữ liệu từ các producer.
+    Mỗi broker quản lý một hoặc nhiều partition của topic. Vì Kafka hỗ trợ tính toán phân tán nên các broker có thể phân phối
+    dữ liệu giữa các máy chủ để nâng cao hiệu suất và tăng cường khả năng chịu lỗi.
+\end{enumerate}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{images/kafka_flow.pdf}
+    \caption[Luồng hoạt động của Apache Kafka]{Luồng hoạt động nhận và gửi tin của Apache Kafka. Các hình tròn đại diện cho các tin nhắn được gửi qua Kafka.}
+    \label{fig:kafka-flow}
+\end{figure}
+
+Kafka được xem là một thành phần quan trọng trong nhiều hệ thống xử lý dữ liệu lớn hiện nay, nhờ khả năng đáp ứng tốt các yêu cầu
+về truyền phát dữ liệu liên tục ở quy mô lớn. Dưới đây là các đặc điểm nổi bật của Kafka:
+
+\begin{itemize}
+    \item \textit{Khả năng mở rộng}: Kafka có thể mở rộng để xử lý lượng dữ liệu lớn bằng cách thêm các broker vào cluster. 
+    Các partition của topic có thể được phân phối trên nhiều broker, giúp tăng khả năng xử lý đồng thời và cân bằng tải giữa các nút trong hệ thống.
+    \item \textit{Tính chịu lỗi cao}: Kafka hỗ trợ cơ chế sao lưu và phân phối dữ liệu, đảm bảo rằng dữ liệu không bị mất khi có sự cố xảy ra. 
+    Mỗi partition có thể có một hoặc nhiều bản sao (replica) để bảo vệ dữ liệu khỏi mất mát. 
+    Các broker sẽ tự động chuyển đổi sang các bản sao khi một broker gặp sự cố.
+    \item \textit{Hiệu suất cao}: Kafka có thể xử lý hàng triệu sự kiện mỗi giây với độ trễ rất thấp. 
+    Điều này là nhờ vào việc sử dụng cơ chế write-ahead log (WAL), nơi dữ liệu được ghi vào log trước khi được xử lý. 
+    Kafka có khả năng tối ưu hóa việc ghi dữ liệu và xử lý đồng thời, giúp đạt được hiệu suất cao.
+    \item \textit{Tính linh hoạt}: Kafka hỗ trợ nhiều kiểu dữ liệu và ứng dụng khác nhau, từ các ứng dụng yêu cầu xử lý thời gian thực 
+    (như hệ thống giám sát và phân tích dữ liệu trực tuyến) đến các ứng dụng yêu cầu lưu trữ và phân tích dữ liệu theo thời gian dài (như hệ thống log và dữ liệu lịch sử).
+    \item \textit{Tích hợp dễ dàng}: Kafka dễ dàng tích hợp với các công cụ và hệ thống khác trong hệ sinh thái dữ liệu lớn như Apache Spark, Apache Flink, Hadoop, và Elasticsearch. 
+    Điều này giúp xây dựng các pipeline xử lý dữ liệu phức tạp mà không gặp phải sự gián đoạn trong quá trình truyền tải dữ liệu.
+
+\end{itemize}
+
+[Thêm một đoạn nữa nói về ứng dụng của Kafka trong xử lý dữ liệu lớn]
+
+\newpage
+
+\subsection{Apache Flink}
+
+Apache Flink là một nền tảng mã nguồn mở mạnh mẽ dùng để xử lý dữ liệu luồng theo thời gian thực và dữ liệu theo lô. 
+Khác với các hệ thống xử lý theo mô hình micro-batch, Flink thực hiện xử lý dữ liệu streaming thực sự, 
+nghĩa là mỗi bản ghi được xử lý ngay khi xuất hiện, với độ trễ rất thấp và khả năng mở rộng cao.
+Flink được thiết kế theo kiến trúc phân tán, cho phép triển khai linh hoạt trên nhiều node trong một cụm máy
+và có thể tích hợp linh hoạt với nhiều hệ thống dữ liệu như Kafka, MongoDB hay các hệ quản trị cơ sở dữ liệu khác.
+
+\subsubsection{Kiến trúc và nguyên lý hoạt động}
+
+Apache Flink gồm 3 thành phần chính: JobManager, TaskManager và Client.
+\begin{itemize}
+  \item \textit{Client}: Chịu trách nhiệm biên dịch và gửi job đến đến cụm máy Flink.
+  \item \textit{JobManager}: Thực hiện lập kế hoạch thực thi các job được gửi lên, quản lý luồng dữ liệu, 
+  điều phối công việc giữa các node, giám sát quá trình thực thi để đảm bảo toàn bộ công việc được xử lý đúng và hiệu quả.
+  \item \textit{TaskManager}: Chịu trách nhiệm thực thi các tác vụ cụ thể, xử lý dữ liệu đầu vào, gửi kết quả đầu ra hoặc kết quả trung gian đến các node khác trong cụm.
+\end{itemize}
+
+Flink thực hiện xử lý dữ liệu streaming thực sự, trong đó mỗi bản ghi được xử lý ngay khi đến thay vì gom thành các batch nhỏ như trong micro-batch,
+cho phép tiến tới một hệ thống có độ trễ xử lý thấp và xử lý liên tục trong thời gian thực.
+Bên cạnh đó, Flink sử dụng cơ chế checkpointing để lưu trạng thái định kỳ, sử dụng state backend để quản lý và truy xuất trạng thái trong quá trình xử lý.
+Ngoài ra, Flink còn hỗ trợ xử lý theo thời gian sự kiện kết hợp với watermark, giúp xử lý chính xác các luồng dữ liệu đến trễ hoặc không theo thứ tự. 
+
+
+Flink có khả năng tích hợp linh hoạt với nhiều công nghệ dữ liệu lớn khác như Apache Kafka, HDFS, MongoDB hoặc Canssandra, cho phép xây dựng các pipeline xử lý dữ liệu phức tạp và mở rộng dễ dàng.
+Trong lập trình, Flink cung cấp DataStream API phục vụ xử lý dữ liệu streaming, cho phép người dùng định nghĩa luồng xử lý thông qua các phép biến đổi như map, filter, keyBy, window hoặc aggregation.
+Bên cạnh các API bằng Java và Scala, Flink cũng cung cấp API cho Python (PyFlink), hỗ trợ người dùng triển khai và quản lý các ứng dụng xử lý dữ liệu luồng bằng Python,
+cho phép mở rộng khả năng tiếp cận và phát triển hệ thống trong nhiều tình huống khác nhau, đặc biệt là khi cần tích hợp với các mô hình học sâu.
+
+\subsubsection{Các ưu điểm của Flink}
+
+\begin{itemize}
+  \item \textit{Xử lý dữ liệu thời gian thực với độ trễ thấp}: Độ trễ của Flink rất thấp, chỉ tính bằng mili-giây,
+  có thể đáp ứng tốt các yêu cầu phân tích và ra quyết định theo thời gian thực, đặc biệt phù hợp cho các bài toán giám sát theo thời gian thực.
+  \item \textit{Xử lý nhất quán và toàn vẹn}: Flink có cơ chế cho phép xử lý dữ liệu dựa trên thời gian sự kiện thay vì thời gian hệ thống, cho phép duy trì tính toàn vẹn của kết quả khi dữ liệu không đồng bộ.
+  Flink cũng có các cơ chế đảm bảo tính nhất quán, đảm bảo mỗi bản ghi được xử lý duy nhất một lần ngay cả khi gặp sự cố.
+  \item \textit{Khả năng tích hợp linh hoạt}: Flink hỗ trợ kết nối và trao đổi dữ liệu với nhiều hệ thống phổ biến như Apache Kafka, Cassandra, MongoDB,
+  giúp xây dựng pipeline liên tục từ thu thập, xử lý đến lưu trữ. Flink cũng hỗ trợ xuất kết quả sang nhiều định dạng khác nhau, phù hợp cho các hệ thống giám sát hay dashboard.
+  \item \textit{Khả năng mở rộng và chịu lỗi cao}: Nhờ kiến trúc phân tán và cơ chế lập lịch linh hoạt, Flink có thể mở rộng quy mô xử lý lên tới hàng trăm node để đáp ứng khối lượng dữ liệu cực lớn.
+  Khi có lỗi xảy ra, Flink tự động khôi phục từ các checkpoint gần nhất mà không làm gián đoạn quá trình xử lý. Những điều giúp Flink duy trì hoạt động ổn định trong môi trường thực tế.
+\end{itemize}
+
+
+\subsection{MongoDB}
+
+MongoDB là một hệ quản trị cơ sở dữ liệu NoSQL phổ biến, được thiết kế để lưu trữ và quản lý dữ liệu phi cấu trúc hoặc cấu trúc linh hoạt,
+được sử dụng rộng rãi trong các hệ thống yêu cầu khả năng mở rộng và hiệu suất cao.
+Khác với hệ quản trị cơ sở dữ liệu quan hệ (RDBMS) sử dụng các bảng và quan hệ, thì MongoDB lưu trữ dưới dạng documents trong collections.
+Mỗi document trong MongoDB là một đối tượng JSON (JavaScript Object Notation) hoặc BSON (Binary JSON), cho phép lưu trữ các kiểu dữ liệu phức tạp như mảng, đối lượng lồng nhau hay kiểu dữ liệu thời gian.
+
+\begin{figure}[ht]
+\centering
+\begin{minipage}{0.85\linewidth}
+\begin{verbatim}
+{
+  "timestamp": "2025-11-07T14:23:10Z",
+  "camera_id": "cam-02-hcm",
+  "location": {
+    "lat": 10.762622,
+    "lon": 106.660172
+  },
+  "vehicle": {
+    "type": "motorbike",
+    "plate": "59K1-12345",
+    "color": "blue"
+  },
+  "speed_kmh": 58.4,
+  "event": "speeding",
+  "confidence": 0.93
+}
+\end{verbatim}
+\end{minipage}
+\caption[Cấu trúc dữ liệu trong MongoDB]{Ví dụ cấu trúc dữ liệu trong MongoDB. MongoDB là một cơ sở dữ liệu NoSQL kiểu document, thường được viết theo định dạng JSON.}
+\label{fig:json-kafka}
+\end{figure}
+
+\subsubsection{Cấu trúc và nguyên lý hoạt động của MongoDB}
+
+Trong MongoDB, dữ liệu được lưu trữ dưới dạng document, mỗi document là một bộ dữ liệu chứa các cặp khóa-giá trị, tương tự như một đối tượng JSON. 
+Một document có thể bao gồm nhiều trường với các kiểu dữ liệu khác nhau, từ chuỗi, số, đến mảng hoặc đối tượng lồng nhau. 
+Điều này cho phép MongoDB xử lý dữ liệu phức tạp và không cần phải tuân theo một sơ đồ dữ liệu cố định như trong các cơ sở dữ liệu quan hệ.
+
+Các document được nhóm lại thành collections. Một collection có thể chứa nhiều document và không yêu cầu các document phải có cấu trúc giống nhau. 
+Điều này mang lại sự linh hoạt rất lớn, vì bạn có thể lưu trữ các loại dữ liệu khác nhau trong cùng một collection mà không cần phải thay đổi cấu trúc của các bảng hay cơ sở dữ liệu như trong hệ quản trị cơ sở dữ liệu quan hệ.
+
+MongoDB sử dụng cơ chế replication để sao lưu và bảo vệ dữ liệu, đảm bảo rằng nếu một nút trong cluster gặp sự cố, dữ liệu vẫn có thể được truy cập thông qua các bản sao (replica set). 
+Một replica set là một nhóm các mongod processes (MongoDB processes), trong đó một node được chọn làm primary và các node còn lại là secondary. Dữ liệu được sao chép từ node primary sang các node secondary, giúp duy trì sự đồng nhất và tính sẵn sàng cao.
+
+\subsubsection{Các ưu điểm nổi bật của MongoDB}
+
+MongoDB có một số tính năng nổi bật giúp nó trở thành lựa chọn phổ biến trong việc xử lý và lưu trữ dữ liệu lớn:
+
+\begin{itemize}
+    \item Khả năng mở rộng (Scalability): MongoDB hỗ trợ khả năng mở rộng ngang (horizontal scaling) thông qua cơ chế sharding. 
+    Sharding cho phép phân chia dữ liệu và lưu trữ nó trên nhiều máy chủ, giúp ứng dụng có thể mở rộng và xử lý một lượng dữ liệu lớn mà không gặp phải sự chậm trễ hoặc giới hạn tài nguyên.
+    \item Tình linh hoạt trong cấu trúc dữ liệu: MongoDB không yêu cầu dữ liệu phải tuân theo một schema cố định như trong các hệ quản trị cơ sở dữ liệu quan hệ. 
+    Điều này cho phép các ứng dụng thay đổi cấu trúc dữ liệu mà không gặp phải những thay đổi phức tạp trong cấu trúc cơ sở dữ liệu. 
+    Mỗi document trong MongoDB có thể có một cấu trúc hoàn toàn khác biệt với các document khác trong cùng một collection.
+    \item Hiệu suất cao: MongoDB sử dụng cơ chế in-memory và indexing để tối ưu hóa việc truy vấn dữ liệu. 
+    Các chỉ mục (index) có thể được tạo cho bất kỳ trường nào trong một document, giúp giảm thời gian truy vấn và cải thiện hiệu suất khi làm việc với dữ liệu lớn.
+    \item Cơ chế sao lưu và phục hồi dữ liệu: MongoDB hỗ trợ cơ chế sao lưu và phục hồi dữ liệu rất mạnh mẽ thông qua replica sets và snapshotting. 
+    Các replica set không chỉ giúp tăng tính khả dụng của hệ thống mà còn bảo vệ dữ liệu khỏi bị mất mát trong trường hợp xảy ra sự cố.
+    \item Quản lý dữ liệu phi cấu trúc: MongoDB rất phù hợp với các ứng dụng xử lý dữ liệu phi cấu trúc hoặc dữ liệu bán cấu trúc như dữ liệu JSON, XML, log file, dữ liệu web scraping, và dữ liệu cảm biến. 
+    Với MongoDB, các nhà phát triển có thể dễ dàng lưu trữ và truy vấn các loại dữ liệu này mà không phải lo lắng về việc thay đổi cấu trúc dữ liệu thường xuyên.
+
+\end{itemize}
+
+\subsubsection{Ứng dụng của MongoDB trong xử lý dữ liệu lớn}
+
+MongoDB đặc biệt hữu ích trong các hệ thống xử lý dữ liệu lớn vì khả năng mở rộng và linh hoạt của nó. 
+Trong môi trường dữ liệu lớn, nơi mà lượng dữ liệu có thể phát sinh nhanh chóng và có thể đến từ nhiều nguồn khác nhau, 
+MongoDB cung cấp một nền tảng để lưu trữ và truy vấn dữ liệu mà không gặp phải sự chậm trễ hoặc tắc nghẽn. 
+Nó có thể được sử dụng trong các ứng dụng web, phân tích dữ liệu lớn, hệ thống lưu trữ log, hệ thống IoT, và các ứng dụng cần xử lý và phân tích dữ liệu thời gian thực.
+
+Một ví dụ điển hình là trong các ứng dụng phân tích log, MongoDB có thể được sử dụng để lưu trữ và truy vấn các tệp log từ nhiều nguồn khác nhau. 
+Các công ty công nghệ lớn sử dụng MongoDB để lưu trữ và phân tích dữ liệu nhạy cảm và phi cấu trúc từ các trang web và dịch vụ của họ.
+
+Ngoài ra, MongoDB còn hỗ trợ tích hợp tốt với các công cụ khác trong hệ sinh thái xử lý dữ liệu lớn, chẳng hạn như Apache Flink, để phân tích và xử lý các tập dữ liệu không lồ. 
+Khi kết hợp với các công cụ như Kafka và Flink, MongoDB có thể giúp xây dựng các hệ thống phân tích dữ liệu thời gian thực mạnh mẽ, có thể xử lý và phân phối dữ liệu với độ trễ thấp và khả năng mở rộng cao.
+
+
+

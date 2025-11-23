@@ -1,0 +1,130 @@
+\documentclass[a4paper, 12pt]{report}
+\setlength{\parskip}{0.5em}
+
+\usepackage{graphicx}
+\usepackage[vietnamese]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath, amssymb}
+\usepackage[top=2cm, bottom=2cm, left=2.5cm, right=2.5cm]{geometry}
+\usepackage{titlesec}
+\usepackage[many]{tcolorbox}
+\usepackage{enumitem}
+\usepackage{subcaption}
+\usepackage{float}
+\usepackage[hidelinks]{hyperref}
+\usepackage{pgfplots}
+\usepackage{tocloft}
+\usepackage{minted}
+\usepackage{tabularx}
+\usepackage[table,xcdraw]{xcolor}
+\usepackage{listings}
+\usepackage{tikz}
+\usetikzlibrary{positioning}
+\usetikzlibrary{shapes,arrows}
+
+\hypersetup{
+    colorlinks,
+    linkcolor={black!50!black},
+    citecolor={blue!50!black},
+    urlcolor={blue!80!black}
+}
+
+
+\title{Báo cáo BTL CSDL}
+\author{Lâm Đức Anh}
+\date{December 2024}
+
+\newcommand{\chapnumfont}{%     % define font for chapter number
+  \usefont{T1}{pnc}{b}{n}%      % choose New Chancery, bold, normal shape
+  \fontsize{75}{75}%          % font size 100pt, baselineskip 100pt
+  \selectfont%                  % activate font
+}
+\colorlet{chapnumcol}{gray!100}  % color for chapter number
+
+\titleformat{\chapter}[display]
+{\filleft\bfseries}
+{\filleft\chapnumfont\textcolor{chapnumcol}{\thechapter}}
+{-24pt}
+{\Huge}
+
+\setlength{\cftchapnumwidth}{3em}
+\setlength{\cftbeforechapskip}{2.5em} 
+\setlength{\cftbeforesecskip}{0.75em}
+\setlength{\cftbeforesubsecskip}{0.5em}
+
+
+
+\renewcommand{\thechapter}{\Roman{chapter}}
+\renewcommand{\thesection}{\arabic{section}}
+% \renewcommand{\thesubsection}{\alph{subsection}.}
+
+
+
+\begin{document}
+
+
+\begin{titlepage}
+
+    \begin{center}
+
+        % Phần trên cùng
+        \textbf{\large Đại học Quốc gia Hà Nội}\\[0.2cm]
+        \textbf{\large Trường Đại học Công nghệ}\\[2cm]
+
+        \includegraphics[width=0.2\textwidth]{images/UET logo.pdf}\\[3cm]
+
+        % Phần ở giữa
+        \textbf{\huge BÁO CÁO ĐỀ TÀI}\\[0.5cm]
+        % \textbf{\Large Bài tập lớn Cơ sở dữ liệu}\\[2cm]
+
+        \textbf{\Large Giám sát giao thông trong thời gian thực \\ sử dụng các công nghệ dữ liệu lớn và học sâu}\\[2cm]
+
+        \begin{align*}
+            &\textbf{Môn học}:&\text{Kỹ thuật và Công nghệ Dữ liệu lớn}\\
+            &\textbf{Giảng viên}:&\text{TS. Trần Hồng Việt}\\[1cm]
+            &\textbf{Thành viên nhóm} &\textbf{Mã sinh viên} \\
+            &\text{Lâm Đức Anh} &23020326 \\
+            &\text{Nguyễn Văn A} &23020000 \\
+        \end{align*}
+        
+        
+    \end{center}
+    \vfill
+    \begin{center}
+        \textbf{\large Hà Nội, 2025}
+    \end{center}
+    
+\end{titlepage}
+
+\tableofcontents % Tạo mục lục
+
+\renewcommand{\listfigurename}{Danh mục hình ảnh} % tùy chỉnh tiêu đề
+\cleardoublepage
+\phantomsection
+\addcontentsline{toc}{chapter}{\listfigurename}
+\listoffigures
+
+\newpage % Sang trang mới sau mục lục
+
+\input{chapter1.tex}
+
+\input{chapter2.tex}
+
+\input{chapter3.tex}
+
+\input{chapter4.tex}
+
+\input{chapter5.tex}
+
+
+% Phần tài liệu tham khảo
+\cleardoublepage
+\phantomsection
+\renewcommand{\bibname}{Tài liệu tham khảo}
+\addcontentsline{toc}{chapter}{\bibname}
+\nocite{*}
+\bibliographystyle{unsrt}
+\bibliography{references}
+
+
+\end{document}
