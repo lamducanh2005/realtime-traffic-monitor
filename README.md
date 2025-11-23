@@ -1,7 +1,6 @@
 ![alt text](report/images/TrungTamDieuHanhHaNoi.png)
 
-# 
-<div style="text-align:center; font-size:200%; font-weight:bold">Giám sát giao thông thời gian thực</div>
+# Giám sát giao thông thời gian thực
 
 <p align="center">
  
@@ -13,8 +12,14 @@
 
 Dự án này xây dựng một hệ thống cơ bản cho việc giám sát giao thông theo thời gian thực, với dữ liệu được thu thập từ các camera an ninh, sử dụng công nghệ xử lý dữ liệu lớn làm nền tảng và học sâu cho các mô hình phân tích.
 
-<div style="">
-
+<div style="display:flex;gap:5px">
+    <div style="flex:1"></div>
+    <a href="report/report.pdf">Xem báo cáo</a>
+    -
+    <a href="report/report.pdf">Xem bản trình bày</a>
+    -
+    <a href="report/report.pdf">Xem demo</a>
+    <div style="flex:1"></div>
 </div>
 
 ## Về dự án
