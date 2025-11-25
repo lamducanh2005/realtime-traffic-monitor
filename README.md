@@ -1,7 +1,5 @@
 ![alt text](resources/images/system_logo.png)
 
-# Giám sát giao thông thời gian thực
-
 <p align="center">
  
   <a href="https://pypi.python.org/pypi/underthesea">
