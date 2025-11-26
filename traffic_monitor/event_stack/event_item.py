@@ -11,6 +11,8 @@ class EventItem(QWidget):
             num_plate: str = "--", 
             timestamp: str = "--",
             warning: str = "",
+            speed: str = "--",
+            vehicle_type: str = "--",
             plate_frame: np.ndarray = None, 
             obj_frame: np.ndarray = None
         ):
@@ -18,6 +20,8 @@ class EventItem(QWidget):
         self.num_plate = num_plate
         self.warning = warning
         self.timestamp = timestamp
+        self.speed = speed
+        self.vehicle_type = vehicle_type
         self.plate_frame = plate_frame
         self.obj_frame = obj_frame
 
@@ -109,9 +113,23 @@ class EventItem(QWidget):
             color: #aaaaaa; 
             font-size: 12px;
         """)
+        
+        self.speed_label = QLabel(f"Tốc độ: {self.speed} km/h")
+        self.speed_label.setStyleSheet("""
+            color: #aaaaaa; 
+            font-size: 12px;
+        """)
+        
+        self.type_label = QLabel(f"Loại xe: {self.vehicle_type}")
+        self.type_label.setStyleSheet("""
+            color: #aaaaaa; 
+            font-size: 12px;
+        """)
 
         info_layout.addWidget(self.num_plate_label)
         info_layout.addWidget(self.time_label)
+        info_layout.addWidget(self.speed_label)
+        info_layout.addWidget(self.type_label)
 
         self.main_layout.addLayout(info_layout)
 

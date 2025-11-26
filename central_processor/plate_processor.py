@@ -5,7 +5,7 @@ from ultralytics import YOLO
 import torch
 import json, time, cv2
 import numpy as np
-from .utils import Base64, MongoVehicleService
+from .utils import Base64, MongoVehicleService, MongoCamService
 
 
 def detect_and_crop_plate(vehicle_frame, plate_model):
@@ -111,102 +111,58 @@ class DetectVehicle(FlatMapFunction):
     def __init__(self):
         self.model = None
         self.device = None
-        self.colors = {}
-        self.class_names = {
-            2: 'car',
-            3: 'motorcycle',
-            5: 'bus',
-            7: 'truck'
-        }
+        self.last_time = 0
     
     def open(self, runtime_context):
-        self.model = YOLO("resources/models/yolo11n.onnx")
+        self.model = YOLO("resources/models/yolo11n.pt")
+        self.cs = MongoCamService()
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        self.last_time = 0
 
     def flat_map(self, value):
         data = json.loads(value)
+        
         cam_id = data.get("camera_id")
         timestamp = data.get("timestamp")
-        frame = Base64.decode_frame(data['frame'])
+        time_sec = data.get("time")
+        frame_b64 = data.get("frame")
+        cam_name = data.get("name")
+        no = data.get("no")
 
-        with torch.no_grad():
-            results = self.model.track(
-                frame,
-                persist=True,
-                classes=[2, 3, 5, 7],
-                imgsz=480,
-                conf=0.4,
-                iou=0.5,
-                verbose=False,
-                half=True,
-                device=self.device,
-                tracker='bytetrack.yaml',
-            )
-        
-        if results[0].boxes.id is None:
-            yield json.dumps({
-                "type": "annotated_frame",
-                "camera_id": cam_id,
-                "timestamp": timestamp,
-                "frame": data['frame']
-            })
-            return
+        annotated_frame = self.cs.get_frame(name=cam_name, no=no)
 
-        boxes = results[0].boxes.xywh.cpu().numpy()
-        boxes_xyxy = results[0].boxes.xyxy.cpu().numpy()
-        track_ids = results[0].boxes.id.cpu().numpy().astype(int)
-        classes = results[0].boxes.cls.cpu().numpy().astype(int)
-
-        frame_h, frame_w = frame.shape[:2]
-        annotated_frame = frame.copy()
-
-        # Yield từng object
-        for box, box_xyxy, track_id, obj_type in zip(boxes, boxes_xyxy, track_ids, classes):
-            # Dùng box_xyxy để crop object (chính xác hơn)
-            x1, y1, x2, y2 = map(int, box_xyxy)
-            
-            # Đảm bảo tọa độ trong giới hạn frame
-            x1 = max(0, min(x1, frame_w))
-            y1 = max(0, min(y1, frame_h))
-            x2 = max(0, min(x2, frame_w))
-            y2 = max(0, min(y2, frame_h))
-
-            # Crop object frame
-            obj_frame_b64 = Base64.encode_frame(frame[y1:y2, x1:x2])
-
-            # Output 1: Object
-            yield json.dumps({
-                "type": "object",
-                "camera_id": cam_id,
-                "timestamp": timestamp,
-                "obj_id": str(track_id),
-                "partition": str(track_id % 2),
-                "obj_type": str(obj_type),
-                "obj_frame": obj_frame_b64
-            })
-
-            # Vẽ bounding box lên annotated frame (dùng lại x1, y1, x2, y2)
-            
-            # Lấy màu theo class thay vì track_id
-            if obj_type not in self.colors:
-                self.colors[obj_type] = tuple(int(c) for c in np.random.randint(0, 255, 3))
-            color = self.colors[obj_type]
-            
-            # Lấy tên class
-            class_name = self.class_names.get(obj_type, f"class_{obj_type}")
-            
-            cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), color, 2)
-            cv2.putText(annotated_frame, class_name, (x1, y1-5),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
-
-        # Output 2: Annotated frame
-        annotated_frame_b64 = Base64.encode_frame(annotated_frame)
+        # Yield annotated frame
         yield json.dumps({
-            "type": "annotated_frame",
             "camera_id": cam_id,
             "timestamp": timestamp,
-            "frame": annotated_frame_b64
+            "part": "annotated_frame",
+            "frame": annotated_frame
         })
+
+        if time_sec != self.last_time:
+            events = self.cs.get_event(name=cam_name, time=time_sec)
+            
+            if len(events) > 0:
+                print(len(events))
+                self.last_time = time_sec
+            
+            for event in events:
+                print('Yield...')
+                # print(type(event["speed"]))
+                # Nếu event là chuỗi json thì chuyển sang dict
+                # event có thể chứa obj_id, obj_type, bounding box, ...
+                
+                yield json.dumps({
+                    "camera_id": cam_id,
+                    "timestamp": timestamp,
+                    "part": "object",
+                    "num_plate": str(event["num_plate"]),
+                    "speed": str(event["speed"]),
+                    "warning": str(event["warning"]),
+                    "type": str(event["type"]),
+                    "plate_frame": str(event["plate_frame"]),
+                    "obj_frame": str(event["vehicle_frame"])
+                })
 
 class DetectPlate(FlatMapFunction):
 

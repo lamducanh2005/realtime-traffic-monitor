@@ -109,11 +109,15 @@ class EventStack(QWidget):
             plate_frame = payload.get('plate_frame', None)
             obj_frame = payload.get('obj_frame', None)
             warning = payload.get('warning', '') or ''
+            speed = payload.get('speed', '--')
+            vehicle_type = payload.get('type', '--')
 
             item = EventItem(
                 num_plate=num_plate, 
                 timestamp=timestamp, 
                 warning=warning,
+                speed=speed,
+                vehicle_type=vehicle_type,
                 plate_frame=plate_frame,
                 obj_frame=obj_frame
             )
@@ -182,6 +186,8 @@ class EventStack(QWidget):
                     'num_plate': num_plate,
                     'timestamp': timestamp,
                     'warning': data.get('warning', ''),
+                    'speed': data.get('speed', '--'),
+                    'type': data.get('type', '--'),
                     'plate_frame': plate_frame,
                     'obj_frame': obj_frame,
                 }
@@ -196,6 +202,8 @@ class EventStack(QWidget):
                             num_plate=num_plate,
                             timestamp=timestamp,
                             warning=data.get('warning', ''),
+                            speed=data.get('speed', '--'),
+                            vehicle_type=data.get('type', '--'),
                             plate_frame=plate_frame,
                             obj_frame=obj_frame
                         ))

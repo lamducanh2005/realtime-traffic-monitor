@@ -111,76 +111,24 @@ class MainStream:
             Types.STRING()
         )
 
-        # Sử dụng DetectVehicle để có objects (bỏ annotated frame)
-        # main_stream = (
-        #     stream
-        #     .key_by(lambda x: json.loads(x).get("camera_id"), key_type=Types.STRING())
-        #     .flat_map(Detect(), output_type=Types.STRING())
-        #     .key_by(
-        #         lambda x: f"{json.loads(x)['camera_id']}_{json.loads(x)['obj_id']}", 
-        #         key_type=Types.STRING()
-        #     )
-        #     .process(ReducePlate(), output_type=Types.STRING())
-        # )
-
-        # counting_stream = (
-        #     main_stream
-        #     .key_by(lambda x: json.loads(x).get("camera_id"), key_type=Types.STRING())
-        #     .process(CountVehicleSimple(), output_type=Types.STRING())
-        # )
-
-        # Gửi kết quả (bỏ annotated frames)
-        # main_stream.sink_to(self.events_sink)
-        # counting_stream.sink_to(self.stats_sink)
-
         combined_stream = (
             stream
             .key_by(lambda x: json.loads(x).get("camera_id"), key_type=Types.STRING())
             .flat_map(DetectVehicle(), output_type=Types.STRING())
         )
 
-        annotated_frames_stream = combined_stream.filter(
-            lambda x: json.loads(x).get("type") == "annotated_frame"
+        annotated_frames_stream = (
+            combined_stream
+            .filter(lambda x: json.loads(x).get("part") == "annotated_frame")
+            .sink_to(self.tracking_sink)
         )
 
         # Tách stream theo loại xe
-        objects_stream = combined_stream.filter(lambda x: json.loads(x).get("type") == "object")
-        
-        # Stream cho xe ô tô (car, bus, truck)
-        car_plate_stream = (
-            objects_stream
-            .filter(lambda x: json.loads(x).get("obj_type") in ["2", "5", "7"])  # car, bus, truck
-            .flat_map(CarDetectPlate(), output_type=Types.STRING())
+        objects_stream = (
+            combined_stream
+            .filter(lambda x: json.loads(x).get("part") == "object")
+            .sink_to(self.events_sink)
         )
-        
-        # Stream cho xe máy
-        motor_plate_stream = (
-            objects_stream
-            .filter(lambda x: json.loads(x).get("obj_type") == "3")  # motorcycle
-            .flat_map(MotorDetectPlate(), output_type=Types.STRING()) 
-        )
-
-        vehicle_plate_stream = (
-            car_plate_stream.union(motor_plate_stream)
-            .key_by(
-                lambda x: f"{json.loads(x)['camera_id']}_{json.loads(x)['obj_id']}", 
-                key_type=Types.STRING()
-            )
-            .process(ReducePlate(), output_type=Types.STRING())
-        )
-        
-
-
-        counting_stream = (
-            objects_stream
-            .key_by(lambda x: json.loads(x).get("camera_id"), key_type=Types.STRING())
-            .process(CountVehicleSimple(), output_type=Types.STRING())
-        )
-
-        vehicle_plate_stream.sink_to(self.events_sink)
-        annotated_frames_stream.sink_to(self.tracking_sink)
-        counting_stream.sink_to(self.stats_sink)
-
 
 
     def execute_job(self):

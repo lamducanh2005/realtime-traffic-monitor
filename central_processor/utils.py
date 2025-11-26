@@ -50,3 +50,34 @@ class MongoVehicleService:
         """
         pass
 
+class MongoCamService:
+    def __init__(self):
+        self.cam = client["admin"]["data"]
+        self.frame = client["admin"]["frame"]
+
+    def get_event(self, name, time):
+        try:
+            camera = self.cam.find_one({"name": name}, {"timeline": 1, "_id": 0})
+            if not camera or "timeline" not in camera:
+                return []
+            return [item for item in camera["timeline"] if item.get("time") == time]
+        except Exception:
+            return []
+    
+    def get_frame(self, name, no):
+        camera = client["admin"][name]
+        try:
+            doc = camera.find_one({"no": no}, {"frame": 1, "_id": 0})
+            if not doc or "frame" not in doc:
+                return None
+            return doc["frame"]
+        except Exception:
+            return None
+            
+
+    
+
+
+
+
+

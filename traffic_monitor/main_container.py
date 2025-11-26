@@ -87,7 +87,7 @@ class TrafficMonitorContainer(QWidget):
         self.tab_widget.setTabPosition(QTabWidget.TabPosition.North)
         
         for i in range(1, 5):
-            cam_id = f"cam{i}"
+            cam_id = f"{i}"
             tab = MonitorTab(cam_id)
             self.tab_widget.addTab(tab, f"Camera {i}")
         

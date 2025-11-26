@@ -85,7 +85,7 @@ class VideoPanel(QWidget):
         # Frame Buffer (FIFO queue) để chống giật lag
         self.frame_buffer = deque(maxlen=5000)
         self.buffer_ready = False
-        self.target_buffer_size = 600
+        self.target_buffer_size = 300
         
         # Timing control
         self.target_fps = 20  # FPS mục tiêu
@@ -197,6 +197,8 @@ class VideoPanel(QWidget):
             
             if isinstance(frame_data, tuple):
                 frame, timestamp = frame_data
+                cv2.putText(frame, f"Cam {self.camera_id} - {timestamp}", 
+                       (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
             else:
                 frame = frame_data
                 timestamp = None
