@@ -148,10 +148,6 @@ class DetectVehicle(FlatMapFunction):
             
             for event in events:
                 print('Yield...')
-                # print(type(event["speed"]))
-                # Nếu event là chuỗi json thì chuyển sang dict
-                # event có thể chứa obj_id, obj_type, bounding box, ...
-                
                 yield json.dumps({
                     "camera_id": cam_id,
                     "timestamp": timestamp,

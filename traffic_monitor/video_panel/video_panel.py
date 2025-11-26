@@ -11,6 +11,7 @@ import time
 from multiprocessing import Process, Queue
 import os
 import signal
+from central_processor.utils import *
 
 CAMERA_STREAM_TOPIC = "cam_tracking"
 BOOTSTRAP_SERVER = [f"localhost:{p}" for p in range(9092, 9092 + 6)]
@@ -42,8 +43,10 @@ def kafka_consumer_worker(camera_id: str, frame_queue: Queue, topic: str, bootst
             if data.get('camera_id') != camera_id:
                 continue
 
-            frame_b64 = data.get('raw_frame') or data.get('frame')
-            timestamp = data.get('timestamp', '')  # THÊM: Lấy timestamp
+            
+            no, name = data.get('no'), data.get('name')
+            frame_b64 = MongoCamService().get_frame(name, no)
+            timestamp = data.get('timestamp', '')
             
             if not frame_b64:
                 continue
@@ -127,7 +130,7 @@ class VideoPanel(QWidget):
         self.is_running = True
         self.consumer_process = Process(
             target=kafka_consumer_worker,
-            args=(self.camera_id, self.frame_queue, self.topic, BOOTSTRAP_SERVER),
+            args=(self.camera_id, self.frame_queue, "cam_raw", BOOTSTRAP_SERVER),
             daemon=True
         )
         self.consumer_process.start()
