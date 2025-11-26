@@ -136,7 +136,7 @@ class DetectVehicle(FlatMapFunction):
             "camera_id": cam_id,
             "timestamp": timestamp,
             "part": "annotated_frame",
-            "frame": annotated_frame
+            "frame": annotated_frame[:min(len(annotated_frame), 10000)]
         })
 
         if time_sec != self.last_time:

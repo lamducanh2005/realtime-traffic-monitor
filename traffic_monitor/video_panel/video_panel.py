@@ -181,11 +181,11 @@ class VideoPanel(QWidget):
         print(f'{buffer_size}/600')
         
         if buffer_size < self.target_buffer_size * 1.5:
-            self.playback_speed = 0.9
+            self.playback_speed = 1.0
         # elif buffer_size < self.target_buffer_size * 1.5:
         #     self.playback_speed = 1.1
         else:
-            self.playback_speed = 1.1
+            self.playback_speed = 1.0
         
         # Chỉ hiển thị frame khi đã đủ thời gian
         adjusted_interval = self.frame_interval / self.playback_speed

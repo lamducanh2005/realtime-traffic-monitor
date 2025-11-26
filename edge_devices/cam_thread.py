@@ -39,7 +39,7 @@ class CameraThread(QThread):
 
         # Buffer để delay hiển thị 5 giây
         self.display_buffer = []
-        self.display_delay = 30.0  # seconds
+        self.display_delay = 15.0  # seconds
 
 
     def run(self):
