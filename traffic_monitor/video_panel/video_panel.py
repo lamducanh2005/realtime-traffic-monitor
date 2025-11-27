@@ -122,7 +122,7 @@ class VideoPanel(QWidget):
 
     def show_placeholder(self):
         placeholder = np.zeros((480, 640, 3), dtype=np.uint8)
-        cv2.putText(placeholder, f"Cam {self.camera_id} Buffering...", (20, 240), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (150, 150, 150), 2)
+        cv2.putText(placeholder, f"Cam {self.camera_id} Connecting...", (20, 240), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (150, 150, 150), 2)
         self.update_frame(placeholder)
 
     def start_kafka_consumer_process(self):
@@ -180,10 +180,10 @@ class VideoPanel(QWidget):
         buffer_size = len(self.frame_buffer)
         print(f'{buffer_size}/600')
         
-        if buffer_size < self.target_buffer_size * 1.5:
-            self.playback_speed = 1.0
-        # elif buffer_size < self.target_buffer_size * 1.5:
-        #     self.playback_speed = 1.1
+        if buffer_size < self.target_buffer_size * 0.9:
+            self.playback_speed = 0.9
+        elif buffer_size > self.target_buffer_size * 1.5:
+            self.playback_speed = 1.1
         else:
             self.playback_speed = 1.0
         

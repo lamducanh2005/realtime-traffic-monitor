@@ -8,19 +8,19 @@ import time
 from pyflink.common import WatermarkStrategy, Types
 
 class CountVehicleSimple(KeyedProcessFunction):
-    """Đếm xe xuất hiện >= 10 frames"""
+    """Đếm số object đi qua và tính tốc độ trung bình"""
     
     def open(self, runtime_context):
         from pyflink.datastream.state import ValueStateDescriptor
         
-        # State: {track_id: frame_count}
-        self.frame_counts = runtime_context.get_state(
-            ValueStateDescriptor("frame_counts", Types.PICKLED_BYTE_ARRAY())
+        # State: {num_plate: first_seen_timestamp} - theo dõi các xe đã đi qua
+        self.seen_plates = runtime_context.get_state(
+            ValueStateDescriptor("seen_plates", Types.PICKLED_BYTE_ARRAY())
         )
         
-        # State: [(track_id, timestamp)] trong 30s
-        self.valid_tracks = runtime_context.get_state(
-            ValueStateDescriptor("valid_tracks", Types.PICKLED_BYTE_ARRAY())
+        # State: [(num_plate, timestamp, speed)] - danh sách xe trong khoảng thời gian
+        self.vehicles_window = runtime_context.get_state(
+            ValueStateDescriptor("vehicles_window", Types.PICKLED_BYTE_ARRAY())
         )
 
         # State: Lưu timestamp của lần emit cuối
@@ -31,8 +31,14 @@ class CountVehicleSimple(KeyedProcessFunction):
     def process_element(self, value, ctx):
         data = json.loads(value)
         cam_id = data["camera_id"]
-        track_id = data["obj_id"]
+        num_plate = data["num_plate"]
         timestamp_str = data["timestamp"]
+        
+        # Lấy speed, nếu không parse được thì để 0
+        try:
+            speed = float(data.get("speed", 0))
+        except (ValueError, TypeError):
+            speed = 0.0
         
         # Parse timestamp
         from datetime import datetime
@@ -40,36 +46,49 @@ class CountVehicleSimple(KeyedProcessFunction):
         current_ts = current_time.timestamp()
         
         # Lấy state
-        counts = self.frame_counts.value() or {}
-        valid = self.valid_tracks.value() or []
+        seen = self.seen_plates.value() or {}
+        vehicles = self.vehicles_window.value() or []
         last_emit = self.last_emit_time.value() or 0
         
-        # Tăng frame count
-        counts[track_id] = counts.get(track_id, 0) + 1
+        # Chỉ đếm xe lần đầu xuất hiện (hoặc đã qua 60s kể từ lần cuối)
+        should_count = False
+        if num_plate and num_plate != "None" and num_plate.strip():
+            last_seen = seen.get(num_plate, 0)
+            if current_ts - last_seen > 60:  # Xe mới hoặc đã qua 60s
+                should_count = True
+                seen[num_plate] = current_ts
+                vehicles.append((num_plate, current_ts, speed))
         
-        # Nếu đủ 10 frames → đánh dấu valid
-        if counts[track_id] == 10:
-            valid.append((track_id, current_ts))
+        # Cleanup: Xóa các xe cũ hơn 60s khỏi window
+        cutoff = current_ts - 60
+        vehicles = [(plate, ts, spd) for plate, ts, spd in vehicles if ts >= cutoff]
         
-        # Cleanup tracks cũ hơn 30s
-        cutoff = current_ts - 30
-        valid = [(tid, ts) for tid, ts in valid if ts >= cutoff]
+        # Cleanup seen plates cũ hơn 120s
+        seen = {plate: ts for plate, ts in seen.items() if current_ts - ts <= 120}
         
         # Update state
-        self.frame_counts.update(counts)
-        self.valid_tracks.update(valid)
+        self.seen_plates.update(seen)
+        self.vehicles_window.update(vehicles)
         
-        # Output stats
-        if current_ts - last_emit >= 1.0:
-            vehicles_in_30s = len(valid)
-            vehicles_per_minute = vehicles_in_30s * 2
+        # Output stats mỗi 2 giây
+        if current_ts - last_emit >= 2.0:
+            vehicle_count = len(vehicles)
+            
+            # Tính tốc độ trung bình (chỉ tính xe có speed > 0)
+            speeds = [spd for _, _, spd in vehicles if spd > 0]
+            avg_speed = sum(speeds) / len(speeds) if speeds else 0.0
+            
+            # Ước tính vehicles per minute (từ dữ liệu 60s)
+            vehicles_per_minute = vehicle_count
             
             yield json.dumps({
                 "type": "traffic_stats",
                 "camera_id": cam_id,
                 "timestamp": timestamp_str,
-                "vehicles_in_30s": vehicles_in_30s,
-                "vehicles_per_minute": vehicles_per_minute
+                "vehicle_count_60s": vehicle_count,
+                "vehicles_per_minute": vehicles_per_minute,
+                "avg_speed": round(avg_speed, 2),
+                "vehicles_with_speed": len(speeds)
             })
             
             # Cập nhật thời gian emit

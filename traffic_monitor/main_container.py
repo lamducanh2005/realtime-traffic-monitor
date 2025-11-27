@@ -39,8 +39,11 @@ class MonitorTab(QWidget):
         self.main_layout.addLayout(content, stretch=8)
 
         # Stats bar
-        self.stat_panel = StatisticPanel()
+        self.stat_panel = StatisticPanel(self.camera_id)
         self.main_layout.addWidget(self.stat_panel, stretch=0)
+
+        # THÊM: Kết nối signal từ VideoPanel đến StatisticPanel
+        self.video_panel.frame_displayed.connect(self.stat_panel.on_video_frame_displayed)
 
     def closeEvent(self, event):
         """Called automatically when widget is closed"""
@@ -50,6 +53,10 @@ class MonitorTab(QWidget):
             pass
         try:
             self.event_stack.close()
+        except Exception:
+            pass
+        try:
+            self.stat_panel.close()
         except Exception:
             pass
         if event:

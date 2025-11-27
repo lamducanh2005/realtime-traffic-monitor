@@ -81,7 +81,7 @@ class MainStream:
             .set_bootstrap_servers(self.KAFKA_BOOTSTRAP_SERVER)
             .set_record_serializer(
                 KafkaRecordSerializationSchema.builder()
-                .set_topic("cam_test_topic_2")
+                .set_topic("cam_stats")
                 .set_value_serialization_schema(SimpleStringSchema())
                 .build()
             )
@@ -127,8 +127,16 @@ class MainStream:
         objects_stream = (
             combined_stream
             .filter(lambda x: json.loads(x).get("part") == "object")
-            .sink_to(self.events_sink)
         )
+
+        counting_stream = (
+            objects_stream
+            .key_by(lambda x: json.loads(x).get("camera_id"), key_type=Types.STRING())
+            .process(CountVehicleSimple(), output_type=Types.STRING())
+            .sink_to(self.stats_sink)
+        )
+
+        objects_stream.sink_to(self.events_sink)
 
 
     def execute_job(self):

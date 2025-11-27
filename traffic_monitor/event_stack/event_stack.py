@@ -151,7 +151,7 @@ class EventStack(QWidget):
                 if data.get('camera_id') != self.camera_id:
                     continue
                 
-                print("New message!")
+                # print("New message!")
                 # Extract data from new message structure
                 num_plate = data.get('num_plate') or '--'
                 timestamp = data.get('timestamp') or ''
