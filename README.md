@@ -13,9 +13,9 @@ Dự án này xây dựng một hệ thống cơ bản cho việc giám sát gia
 <p align="center">
     <a href="resources/report.pdf">Xem báo cáo</a>
     -
-    <a href="report/report.pdf">Xem bản trình bày</a>
+    <a href="report/presentation.pdf">Xem bản trình bày</a>
     -
-    <a href="report/report.pdf">Xem demo</a>
+    <a href="report/presentation.pdf">Xem demo</a>
     <div style="flex:1"></div>
 </p>
 
