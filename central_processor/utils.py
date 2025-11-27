@@ -48,7 +48,33 @@ class MongoVehicleService:
         """
         Tìm xe có biển số là num_plate và ghi lại nhật ký chuyển vào ngày hôm đó
         """
-        pass
+        if not num_plate:
+            return False
+        event = {
+            "time": kwargs["timestamp"],
+            "speed": kwargs["speed"],
+            "plate_frame": kwargs["plate_frame"],
+            "obj_frame": kwargs["obj_frame"]
+        }
+        try:
+            result = self.users.find_one({"num_plate": num_plate})
+            if result:
+                # Append event to events array
+                self.users.update_one(
+                    {"num_plate": num_plate},
+                    {"$push": {"events": event}}
+                )
+            else:
+                # Create new document
+                doc = {
+                    "num_plate": num_plate,
+                    "events": [event]
+                }
+                self.users.insert_one(doc)
+            return True
+        except Exception as e:
+            # Optionally log error
+            return False
 
 class MongoCamService:
     def __init__(self):

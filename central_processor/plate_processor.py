@@ -148,6 +148,18 @@ class DetectVehicle(FlatMapFunction):
             
             for event in events:
                 print('Yield...')
+                # Ghi log vào database cho mỗi event
+                MongoVehicleService().log_vehicle(
+                    str(event["num_plate"]),
+                    camera_id=cam_id,
+                    timestamp=timestamp,
+                    speed=str(event["speed"]),
+                    warning=str(event["warning"]),
+                    type=str(event["type"]),
+                    plate_frame=str(event["plate_frame"]),
+                    obj_frame=str(event["vehicle_frame"])
+                )
+                
                 yield json.dumps({
                     "camera_id": cam_id,
                     "timestamp": timestamp,
