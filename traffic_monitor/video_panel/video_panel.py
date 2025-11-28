@@ -14,7 +14,7 @@ import signal
 from central_processor.utils import *
 
 CAMERA_STREAM_TOPIC = "cam_tracking"
-BOOTSTRAP_SERVER = [f"localhost:{p}" for p in range(9092, 9092 + 6)]
+BOOTSTRAP_SERVER = [f"10.11.193.172:{p}" for p in range(9092, 9092 + 6)]
 
 
 def kafka_consumer_worker(camera_id: str, frame_queue: Queue, topic: str, bootstrap_servers: list):

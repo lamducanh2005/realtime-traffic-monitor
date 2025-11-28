@@ -18,7 +18,7 @@ class SecondaryStream:
     KC_JAR = Path(r"C:\Users\Admin\Documents\Study\_INT3229 Big Data\final project\resources\jars\kafka-clients-3.4.0.jar")
 
     # Generate 6 bootstrap broker addresses compactly
-    KAFKA_BOOTSTRAP_SERVER = ",".join(f"192.168.0.106:{p}" for p in range(9092, 9092 + 6))
+    KAFKA_BOOTSTRAP_SERVER = ",".join(f"10.11.193.172:{p}" for p in range(9092, 9092 + 6))
     SOURCE_TOPIC = "cam_raw"  # Nhận từ camera
     TRACKING_TOPIC = "cam_tracking"
 

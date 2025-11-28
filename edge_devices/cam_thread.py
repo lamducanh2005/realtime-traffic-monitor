@@ -7,7 +7,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 from kafka import KafkaProducer
 
 
-BOOTSTRAP_SERVER = [f"192.168.0.106:{i}" for i in range(9092, 9092 + 6)]
+BOOTSTRAP_SERVER = [f"10.11.193.172:{i}" for i in range(9092, 9092 + 6)]
 STREAMING_TOPIC = "cam_raw"
 
 class CameraThread(QThread):

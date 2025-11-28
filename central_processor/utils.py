@@ -18,7 +18,7 @@ class Base64:
         frame = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
         return frame
 
-MONGO_URI = "mongodb://root:123456@localhost:27017/"
+MONGO_URI = "mongodb://root:123456@10.11.193.172:27017/"
 client = MongoClient(MONGO_URI)
 
 DB_NAME = "traffic-monitor"
